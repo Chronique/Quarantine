@@ -1,7 +1,7 @@
 "use client";
 
 import { Tabs, TabItem } from "@worldcoin/mini-apps-ui-kit-react";
-import { Settings, User, Wallet } from "iconoir-react";
+import { Settings, User, Wallet,RefreshDouble } from "iconoir-react";
 import { TabType } from "~/types";
 import { HapticWrapper } from "~/components/haptic-wrapper";
 
@@ -22,11 +22,11 @@ export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationPro
               label="Actions"
             />
           </HapticWrapper>
-          <HapticWrapper onClick={() => onTabChange("context")} hapticType="selection">
+          <HapticWrapper onClick={() => onTabChange("swap")} hapticType="selection">
             <TabItem 
-              value="context"
-              icon={<User width={20} height={20} />}
-              label="Context"
+              value="swap"
+              icon={<RefreshDouble width={20} height={20} />}
+              label="Swap"
             />
           </HapticWrapper>
           <HapticWrapper onClick={() => onTabChange("wallet")} hapticType="selection">
