@@ -28,7 +28,26 @@ export function useScanner() {
 
       const rawBalances = res.data.result.tokenBalances;
 
-      // 2. Ambil metadata (Simbol & Logo) secara paralel
+      // 2. Ambil Saldo & Metadata dari Moralis (Sangat akurat untuk Logo & Spam Filter)
+      const moralisRes = await axios.get(
+        `https://deep-index.moralis.io/api/v2.2/wallets/${addrToScan}/tokens?chain=base`,
+        { headers: { 'X-API-Key': process.env.NEXT_PUBLIC_MORALIS_API_KEY } }
+      );
+
+      const rawTokens = moralisRes.data.result || [];
+
+      if (rawTokens.length === 0) {
+        setTokens([]);
+        return;
+      }
+
+
+      // 3. Ambil data Likuiditas & Logo dari DexScreener
+      const addresses = rawBalances.map((b: any) => b.contractAddress).join(',');
+      const dexRes = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${addresses}`);
+      const pairs = dexRes.data.pairs || [];
+
+      // 4. Ambil metadata (Simbol & Logo) secara paralel
       const detailedTokens = await Promise.all(
         rawBalances
           .filter((t: any) => t.tokenBalance !== "0x0000000000000000000000000000000000000000000000000000000000000000")
