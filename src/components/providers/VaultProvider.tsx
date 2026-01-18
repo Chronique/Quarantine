@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { createSmartAccountClient } from "permissionless";
 import { toSimpleSmartAccount } from "permissionless/accounts";
-import { http, isAddress } from "viem";
+import { http } from "viem";
 import { base } from "viem/chains";
 
 interface VaultContextType {
@@ -30,55 +30,44 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initSmartAccount = async () => {
-      // Pastikan semua data sudah siap dan alamat valid
-      if (!isConnected || !walletClient || !address || !isAddress(address) || !publicClient) {
-        return;
-      }
+      // Menggunakan logika pengecekan dari kode lama
+      if (!isConnected || !walletClient || !address || !publicClient) return;
 
       setIsLoading(true);
       try {
-        // Signer Wrapper yang aman dari error 'undefined'
-        const customSigner = {
-          address: address as `0x${string}`,
-          signMessage: async ({ message }: { message: any }) => {
-            return walletClient.signMessage({ 
-              account: address, // Gunakan address langsung sebagai fallback
-              message: typeof message === 'string' ? message : message.raw 
-            });
-          },
-          signTypedData: async (typedData: any) => {
-            return walletClient.signTypedData({
-              account: address,
-              ...typedData
-            });
-          }
-        };
-
-        // 1. Definisikan Smart Account
+        // 1. Definisikan Smart Account (Menggunakan owner: walletClient langsung seperti kode lama)
         const simpleAccount = await toSimpleSmartAccount({
           client: publicClient as any,
-          owner: customSigner as any,
+          owner: walletClient as any, 
           factoryAddress: "0x9406Cc6185a346906296840746125a0E44976454",
           entryPoint: {
             address: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
             version: "0.6"
-          } as any,
+          },
         });
 
         // 2. Hubungkan dengan Bundler Pimlico
         const client = createSmartAccountClient({
           account: simpleAccount,
           chain: base,
-          bundlerTransport: http(`https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`),
+          bundlerTransport: http(
+            `https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`
+          ),
+          // Menggunakan endpoint Paymaster yang baru: /api/webhook/paymaster
           paymaster: {
             getPaymasterData: async (userOperation) => {
               const response = await fetch("/api/webhook/paymaster", {
                 method: "POST",
                 body: JSON.stringify({ 
                   method: "pm_getPaymasterData", 
-                  params: [userOperation, "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", {}] 
+                  params: [
+                    userOperation, 
+                    "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", 
+                    {}
+                  ] 
                 }),
               });
+              
               const res = await response.json();
               return res;
             },
