@@ -1,37 +1,60 @@
-// src/app/api/webhook/swap/route.ts
-import { NextResponse } from 'next/server';
+import { useState } from 'react';
+import { useAccount } from 'wagmi';
+import axios from 'axios';
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const buyToken = '0x4200000000000000000000000000000000000006'; // WETH di Base
-  const sellToken = searchParams.get('sellToken');
-  const sellAmount = searchParams.get('sellAmount');
-  const takerAddress = searchParams.get('takerAddress');
+export function useScanner() {
+  const { address } = useAccount();
+  const [tokens, setTokens] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  if (!sellToken || !sellAmount || !takerAddress) {
-    return NextResponse.json({ error: 'Parameter tidak lengkap' }, { status: 400 });
-  }
+  const scanTrash = async (targetAddress?: string, network: string = 'base-mainnet') => {
+    const addrToScan = targetAddress || address;
+    if (!addrToScan) return;
 
-  // Alamat wallet Anda untuk menerima fee
-  const feeRecipient = "0x4fba95e4772be6d37a0c931D00570Fe2c9675524"; 
-  const buyTokenPercentageFee = "0.05"; // Fee diatur ke 5%
+    setIsLoading(true);
+    setTokens([]);
 
-  // Endpoint khusus Base Network
-  const url = `https://base.api.0x.org/swap/v1/quote?buyToken=${buyToken}&sellToken=${sellToken}&sellAmount=${sellAmount}&takerAddress=${takerAddress}&feeRecipient=${feeRecipient}&buyTokenPercentageFee=${buyTokenPercentageFee}`;
+    try {
+      const alchemyUrl = `https://${network}.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_TOKEN_API}`;
+      
+      const res = await axios.post(alchemyUrl, {
+        jsonrpc: "2.0",
+        method: "alchemy_getTokenBalances",
+        params: [addrToScan],
+        id: 42
+      });
 
-  try {
-    const response = await fetch(url, {
-      headers: { 
-        '0x-api-key': process.env.ZERO_EX_API_KEY || '',
-        'Content-Type': 'application/json'
-      }
-    });
+      const rawBalances = res.data.result.tokenBalances;
 
-    const data = await response.json();
-    if (!response.ok) return NextResponse.json(data, { status: response.status });
+      const detailedTokens = await Promise.all(
+        rawBalances
+          .filter((t: any) => t.tokenBalance !== "0x0000000000000000000000000000000000000000000000000000000000000000")
+          .map(async (t: any) => {
+            const metaRes = await axios.post(alchemyUrl, {
+              jsonrpc: "2.0",
+              method: "alchemy_getTokenMetadata",
+              params: [t.contractAddress],
+              id: 1
+            });
+            const meta = metaRes.data.result;
+            return {
+              address: t.contractAddress, // Ini yang dicari logika Swap
+              symbol: meta.symbol,
+              logo: meta.logo, 
+              balance: t.tokenBalance, // Ini yang dicari logika Swap
+              decimals: meta.decimals,
+              network
+            };
+          })
+      );
 
-    return NextResponse.json(data);
-  } catch (error) {
-    return NextResponse.json({ error: 'Gagal fetch quote 0x' }, { status: 500 });
-  }
+      setTokens(detailedTokens);
+    } catch (error) {
+      console.error("Alchemy Scan failed:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { scanTrash, tokens, isLoading };
 }

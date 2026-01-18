@@ -24,7 +24,6 @@ export default function Demo() {
   const { vaultAddress, isLoading: vaultLoading, smartAccountClient } = useVault();
   
   const [activeTab, setActiveTab] = useState<TabType>("actions");
-  const isSeamlessUser = !!frameContext?.context;
   const { scanTrash, tokens, isLoading: isScanning } = useScanner();
   const vaultScanner = useScanner(); 
 
@@ -66,10 +65,12 @@ export default function Demo() {
   };
 
   const handleSwapToEth = async (token: any) => {
-    if (!smartAccountClient || !vaultAddress) return;
+    if (!smartAccountClient || !vaultAddress || !token.address) {
+      alert("Data koin atau Vault tidak valid.");
+      return;
+    }
     setIsSwapping(token.address);
     try {
-      // Pemanggilan rute /api/webhook/swap
       const res = await fetch(`/api/webhook/swap?sellToken=${token.address}&sellAmount=${token.balance}&takerAddress=${vaultAddress}`);
       const quote = await res.json();
 
@@ -98,7 +99,7 @@ export default function Demo() {
       vaultScanner.scanTrash(vaultAddress, "base-mainnet");
     } catch (err) {
       console.error(err);
-      alert("Swap Gagal. Cek koneksi atau saldo ETH di Vault.");
+      alert("Swap Gagal. Pastikan Vault memiliki saldo ETH minimal $3.");
     } finally { setIsSwapping(null); }
   };
 
@@ -114,16 +115,16 @@ export default function Demo() {
 
   return (
     <div style={{ marginTop: (frameContext?.context as any)?.client?.safeAreaInsets?.top ?? 0, paddingBottom: '100px' }} className="bg-slate-50 min-h-screen font-sans text-left">
-      <div className="w-full max-w-lg mx-auto p-4">
+      <div className="w-full max-w-lg mx-auto p-4 text-left">
         <TopBar />
 
         {activeTab === "actions" && (
           <div className="mt-6 space-y-6">
             <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-start gap-3">
               <WarningTriangle width={20} className="text-amber-600 mt-1" />
-              <div className="text-left">
-                <p className="text-xs font-bold text-amber-800 text-left">Farcaster User Info</p>
-                <p className="text-[10px] text-amber-700 leading-relaxed text-left">Kirim <b>$3 ETH</b> ke Vault Anda agar fitur Swap di Farcaster lancar (estimasi gas).</p>
+              <div>
+                <p className="text-xs font-bold text-amber-800 text-left">Farcaster Gas Info</p>
+                <p className="text-[10px] text-amber-700 leading-relaxed text-left">Kirim <b>$3 ETH</b> ke Vault agar fitur Swap lancar.</p>
               </div>
             </div>
 
@@ -133,7 +134,7 @@ export default function Demo() {
                 <h2 className="text-2xl font-black mb-4">Quarantine Vault</h2>
                 <div className="bg-white/5 border border-white/10 p-4 rounded-2xl flex justify-between items-center backdrop-blur-sm">
                   <div className="truncate mr-4 text-left">
-                    <p className="text-[10px] text-slate-400 mb-1">Vault Address (Base)</p>
+                    <p className="text-[10px] text-slate-400 mb-1 text-left">Vault Address (Base)</p>
                     <p className="font-mono text-xs truncate">{vaultAddress || "Loading..."}</p>
                   </div>
                   <button onClick={() => { navigator.clipboard.writeText(vaultAddress!); alert("Copied!"); }} className="p-3 bg-white/10 rounded-xl"><Copy width={18} /></button>
@@ -142,7 +143,7 @@ export default function Demo() {
             </div>
 
             <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
-              <h3 className="text-lg font-bold flex items-center gap-2 mb-6"><SystemRestart width={20} className={isScanning ? "animate-spin" : ""} /> Trash Scanner</h3>
+              <h3 className="text-lg font-bold flex items-center gap-2 mb-6 text-left"><SystemRestart width={20} className={isScanning ? "animate-spin" : ""} /> Trash Scanner</h3>
               <button onClick={() => scanTrash()} disabled={isScanning || !isConnected} className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 mb-4">
                 {isScanning ? "Scanning..." : "Scan My Main Wallet"}
               </button>
@@ -165,23 +166,19 @@ export default function Demo() {
           <div className="mt-6 space-y-4">
             <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
               <div className="flex items-center gap-2 mb-6 text-slate-800 text-left"><RefreshDouble width={24} /><h3 className="text-lg font-bold">Swap Inside Vault</h3></div>
-              <p className="text-xs text-slate-500 mb-6 text-left">Tukar koin yang ada di Vault menjadi ETH melalui 0x Protocol (Fee: 5%).</p>
+              <p className="text-xs text-slate-500 mb-6 text-left">Fee: 5%. Tukar koin di Vault menjadi ETH.</p>
               <div className="space-y-4">
                 {vaultScanner.tokens.length > 0 ? vaultScanner.tokens.map((token: any) => (
                   <div key={token.address} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 text-left">
                       {token.logo ? <img src={token.logo} className="w-10 h-10 rounded-xl" /> : <div className="w-10 h-10 bg-white border rounded-xl flex items-center justify-center font-bold text-slate-400 text-xs">{token.symbol?.[0]}</div>}
-                      <div className="text-left"><p className="font-bold text-slate-800 text-sm text-left">{token.symbol}</p></div>
+                      <div className="text-left"><p className="font-bold text-slate-800 text-sm">{token.symbol}</p></div>
                     </div>
-                    <button 
-                      onClick={() => handleSwapToEth(token)}
-                      disabled={isSwapping === token.address}
-                      className="flex items-center gap-2 bg-blue-600 text-white text-[10px] font-black px-4 py-2.5 rounded-xl uppercase shadow-md active:scale-95 disabled:bg-slate-300"
-                    >
+                    <button onClick={() => handleSwapToEth(token)} disabled={isSwapping === token.address} className="flex items-center gap-2 bg-blue-600 text-white text-[10px] font-black px-4 py-2.5 rounded-xl uppercase shadow-md active:scale-95 disabled:bg-slate-300">
                       {isSwapping === token.address ? "Swapping..." : "Swap to ETH"} <ArrowRight width={12} />
                     </button>
                   </div>
-                )) : <div className="text-center py-12 italic text-xs text-slate-400">Belum ada koin di dalam Vault.</div>}
+                )) : <div className="text-center py-12 italic text-xs text-slate-400">Pindahkan koin kotor dulu.</div>}
               </div>
             </div>
           </div>
@@ -196,10 +193,10 @@ export default function Demo() {
               </div>
               <div className="grid grid-cols-4 gap-2 mb-4">
                 {[25, 50, 75, 100].map((pct) => (
-                  <button key={pct} onClick={() => setWithdrawPercentage(pct)} className={`py-2 rounded-xl text-[10px] font-bold transition-all ${withdrawPercentage === pct ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>{pct === 100 ? 'MAX' : `${pct}%`}</button>
+                  <button key={pct} onClick={() => setWithdrawPercentage(pct)} className={`py-2 rounded-xl text-[10px] font-bold transition-all ${withdrawPercentage === pct ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{pct === 100 ? 'MAX' : `${pct}%`}</button>
                 ))}
               </div>
-              <button onClick={handleWithdraw} disabled={Number(vaultEthBalance) === 0} className="w-full flex items-center justify-center gap-2 bg-red-500 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95"><LogOut width={18} /> Withdraw {withdrawPercentage}%</button>
+              <button onClick={handleWithdraw} className="w-full flex items-center justify-center gap-2 bg-red-500 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95"><LogOut width={18} /> Withdraw {withdrawPercentage}%</button>
             </div>
           </div>
         )}
