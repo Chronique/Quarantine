@@ -1,4 +1,3 @@
-// src/app/providers.tsx
 "use client";
 
 import dynamic from "next/dynamic";
@@ -17,7 +16,6 @@ const ErudaProvider = dynamic(
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    // FrameProvider harus paling luar agar SDK siap untuk Wagmi
     <FrameProvider>
       <WagmiProvider>
         <ErudaProvider />

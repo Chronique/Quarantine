@@ -30,30 +30,28 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initSmartAccount = async () => {
-      // Tunggu hingga koneksi wallet dari Farcaster terdeteksi
+      // PENGECEKAN KETAT: Pastikan walletClient dan account sudah ada
       if (!isConnected || !walletClient || !address || !publicClient) return;
 
       setIsLoading(true);
       try {
-        // BUNGKUS SIGNER SECARA MANUAL UNTUK v0.3.2
-        // Ini memastikan popup konfirmasi wallet muncul saat transaksi
+        // Signer Wrapper yang lebih aman dari error undefined
         const customSigner = {
           address: address as `0x${string}`,
           signMessage: async ({ message }: { message: any }) => {
             return walletClient.signMessage({ 
-              account: walletClient.account, 
+              account: walletClient.account || address, // Fallback ke address jika account undefined
               message: typeof message === 'string' ? message : message.raw 
             });
           },
           signTypedData: async (typedData: any) => {
             return walletClient.signTypedData({
-              account: walletClient.account,
+              account: walletClient.account || address, // Fallback
               ...typedData
             });
           }
         };
 
-        // 1. Definisikan Smart Account (Alamat Vault Anda dihitung di sini)
         const simpleAccount = await toSimpleSmartAccount({
           client: publicClient as any,
           owner: customSigner as any,
@@ -64,7 +62,6 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           } as any,
         });
 
-        // 2. Hubungkan dengan Bundler Pimlico
         const client = createSmartAccountClient({
           account: simpleAccount,
           chain: base,
@@ -79,14 +76,13 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
                 }),
               });
               const res = await response.json();
-              return res; // Pastikan route mengembalikan data.result
+              return res;
             },
           },
         });
 
         setSmartClient(client);
         setVaultAddress(simpleAccount.address);
-        console.log("Vault Loaded:", simpleAccount.address);
       } catch (error) {
         console.error("Gagal inisialisasi Vault:", error);
       } finally {
