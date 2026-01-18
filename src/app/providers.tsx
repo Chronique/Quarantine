@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 
 import FrameProvider from "~/components/providers/frame-provider";
-
+import { VaultProvider } from "~/components/providers/VaultProvider";
 
 const WagmiProvider = dynamic(
   () => import("~/components/providers/wagmi-provider"),
@@ -24,8 +24,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <WagmiProvider>
       <FrameProvider>
         <ErudaProvider />
+        <VaultProvider>
         {children}
+        </VaultProvider>
       </FrameProvider>
     </WagmiProvider>
+    
   );
 }

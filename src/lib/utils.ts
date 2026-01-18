@@ -2,8 +2,8 @@ import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
 export const METADATA = {
-  name: "Base Mini App Demo",
-  description: "A demo mini app for testing capabilities on Base",
+  name: "Quarantine Six",
+  description: "Cleaning up your wallet from dust tokens on Base Network",
   bannerImageUrl: 'https://quarantine-six.vercel.app/banner.png',
   iconImageUrl: 'https://quarantine-six.vercel.app/icon.png',
   // homeUrl: process.env.NEXT_PUBLIC_URL ?? "https://frames-v2-demo-lilac.vercel.app",
