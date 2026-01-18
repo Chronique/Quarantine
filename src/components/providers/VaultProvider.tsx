@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { createSmartAccountClient } from "permissionless";
 import { toSimpleSmartAccount } from "permissionless/accounts";
-import { http } from "viem";
+import { http, isAddress } from "viem";
 import { base } from "viem/chains";
 
 interface VaultContextType {
@@ -13,7 +13,6 @@ interface VaultContextType {
   isLoading: boolean;
 }
 
-// Inisialisasi Context di luar komponen agar scope-nya benar
 const VaultContext = createContext<VaultContextType>({
   smartAccountClient: null,
   vaultAddress: null,
@@ -31,16 +30,19 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initSmartAccount = async () => {
-      // Pastikan signer sudah siap
-      if (!isConnected || !walletClient || !address || !publicClient) return;
+      // Pastikan semua data sudah siap dan alamat valid
+      if (!isConnected || !walletClient || !address || !isAddress(address) || !publicClient) {
+        return;
+      }
 
       setIsLoading(true);
       try {
+        // Signer Wrapper yang aman dari error 'undefined'
         const customSigner = {
           address: address as `0x${string}`,
           signMessage: async ({ message }: { message: any }) => {
             return walletClient.signMessage({ 
-              account: address, 
+              account: address, // Gunakan address langsung sebagai fallback
               message: typeof message === 'string' ? message : message.raw 
             });
           },
@@ -52,6 +54,7 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           }
         };
 
+        // 1. Definisikan Smart Account
         const simpleAccount = await toSimpleSmartAccount({
           client: publicClient as any,
           owner: customSigner as any,
@@ -62,6 +65,7 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           } as any,
         });
 
+        // 2. Hubungkan dengan Bundler Pimlico
         const client = createSmartAccountClient({
           account: simpleAccount,
           chain: base,
@@ -75,7 +79,8 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
                   params: [userOperation, "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", {}] 
                 }),
               });
-              return await response.json();
+              const res = await response.json();
+              return res;
             },
           },
         });
@@ -99,5 +104,4 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-// Export hook useVault
 export const useVault = () => useContext(VaultContext);
