@@ -17,6 +17,7 @@ export function useScanner() {
     try {
       const alchemyUrl = `https://${network}.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_TOKEN_API}`;
       
+      // 1. Ambil saldo token
       const res = await axios.post(alchemyUrl, {
         jsonrpc: "2.0",
         method: "alchemy_getTokenBalances",
@@ -26,6 +27,7 @@ export function useScanner() {
 
       const rawBalances = res.data.result.tokenBalances;
 
+      // 2. Ambil metadata (Simbol & Logo) secara paralel
       const detailedTokens = await Promise.all(
         rawBalances
           .filter((t: any) => t.tokenBalance !== "0x0000000000000000000000000000000000000000000000000000000000000000")
