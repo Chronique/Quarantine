@@ -13,7 +13,7 @@ interface VaultContextType {
   isLoading: boolean;
 }
 
-// Inisialisasi Context
+// Inisialisasi Context di luar komponen agar scope-nya benar
 const VaultContext = createContext<VaultContextType>({
   smartAccountClient: null,
   vaultAddress: null,
@@ -31,6 +31,7 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initSmartAccount = async () => {
+      // Pastikan signer sudah siap
       if (!isConnected || !walletClient || !address || !publicClient) return;
 
       setIsLoading(true);
@@ -39,13 +40,13 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           address: address as `0x${string}`,
           signMessage: async ({ message }: { message: any }) => {
             return walletClient.signMessage({ 
-              account: walletClient.account, 
+              account: address, 
               message: typeof message === 'string' ? message : message.raw 
             });
           },
           signTypedData: async (typedData: any) => {
             return walletClient.signTypedData({
-              account: walletClient.account,
+              account: address,
               ...typedData
             });
           }
@@ -82,7 +83,7 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
         setSmartClient(client);
         setVaultAddress(simpleAccount.address);
       } catch (error) {
-        console.error("Gagal inisialisasi Vault:", error);
+        console.error("Gagal inisialisasi Smart Account:", error);
       } finally {
         setIsLoading(false);
       }
@@ -98,5 +99,5 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-// Pastikan useVault di-export di sini
+// Export hook useVault
 export const useVault = () => useContext(VaultContext);
