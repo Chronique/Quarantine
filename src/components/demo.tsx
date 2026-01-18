@@ -24,6 +24,7 @@ export default function Demo() {
   const { vaultAddress, isLoading: vaultLoading, smartAccountClient } = useVault();
   
   const [activeTab, setActiveTab] = useState<TabType>("actions");
+  const isSeamlessUser = !!frameContext?.context;
   const { scanTrash, tokens, isLoading: isScanning } = useScanner();
   const vaultScanner = useScanner(); 
 
@@ -60,25 +61,21 @@ export default function Demo() {
           args: [vaultAddress as `0x${string}`, BigInt(balance)],
         }),
       });
-      alert(`Memproses pemindahan ${symbol} ke Vault...`);
+      alert(`Memindahkan ${symbol} ke Vault...`);
     } catch (err) { console.error(err); }
   };
 
-  // LOGIKA SWAP 0x DENGAN BATCH (APPROVE + SWAP)
   const handleSwapToEth = async (token: any) => {
     if (!smartAccountClient || !vaultAddress) return;
-    
     setIsSwapping(token.address);
     try {
-      // 1. Ambil Quote dari API Route kita
-      const res = await fetch(`/api/swap?sellToken=${token.address}&sellAmount=${token.balance}&takerAddress=${vaultAddress}`);
+      // Pemanggilan rute /api/webhook/swap
+      const res = await fetch(`/api/webhook/swap?sellToken=${token.address}&sellAmount=${token.balance}&takerAddress=${vaultAddress}`);
       const quote = await res.json();
 
       if (quote.error) throw new Error(quote.error);
 
-      // 2. Kirim Batch Transaction: Approve + Swap
-      // Karena ini Smart Account, dua transaksi ini digabung jadi satu UserOperation
-      const hash = await smartAccountClient.sendTransactions({
+      await smartAccountClient.sendTransactions({
         transactions: [
           {
             to: token.address as `0x${string}`,
@@ -96,16 +93,13 @@ export default function Demo() {
         ],
       });
 
-      console.log("Swap Success:", hash);
-      alert(`${token.symbol} berhasil di-swap ke ETH!`);
-      vaultScanner.scanTrash(vaultAddress, "base-mainnet");
+      alert("Swap Berhasil!");
       fetchVaultBalance();
+      vaultScanner.scanTrash(vaultAddress, "base-mainnet");
     } catch (err) {
-      console.error("Swap Error:", err);
-      alert("Gagal melakukan swap. Pastikan saldo ETH di Vault cukup untuk gas estimasi.");
-    } finally {
-      setIsSwapping(null);
-    }
+      console.error(err);
+      alert("Swap Gagal. Cek koneksi atau saldo ETH di Vault.");
+    } finally { setIsSwapping(null); }
   };
 
   const handleWithdraw = async () => {
@@ -115,7 +109,7 @@ export default function Demo() {
       await smartAccountClient.sendTransaction({ to: address, value: amount });
       alert("Withdraw berhasil!");
       fetchVaultBalance();
-    } catch (err) { alert("Gagal. Pastikan Vault memiliki saldo ETH."); }
+    } catch (err) { alert("Gagal. Vault butuh ETH untuk proses penarikan."); }
   };
 
   return (
@@ -127,39 +121,37 @@ export default function Demo() {
           <div className="mt-6 space-y-6">
             <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-start gap-3">
               <WarningTriangle width={20} className="text-amber-600 mt-1" />
-              <div>
-                <p className="text-xs font-bold text-amber-800">Saldo Gas Vault</p>
-                <p className="text-[10px] text-amber-700 leading-relaxed">
-                  Vault memerlukan saldo ETH sendiri. Kirim <b>$3 ETH</b> ke alamat di bawah agar swap lancar.
-                </p>
+              <div className="text-left">
+                <p className="text-xs font-bold text-amber-800 text-left">Farcaster User Info</p>
+                <p className="text-[10px] text-amber-700 leading-relaxed text-left">Kirim <b>$3 ETH</b> ke Vault Anda agar fitur Swap di Farcaster lancar (estimasi gas).</p>
               </div>
             </div>
 
             <div className="bg-slate-900 p-6 rounded-[2rem] shadow-2xl text-white relative overflow-hidden">
-              <div className="relative z-10">
-                <p className="text-slate-400 text-xs font-bold uppercase mb-1">Personal Vault</p>
+              <div className="relative z-10 text-left">
+                <p className="text-slate-400 text-xs font-bold uppercase mb-1">Your Personal Vault</p>
                 <h2 className="text-2xl font-black mb-4">Quarantine Vault</h2>
-                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl flex justify-between items-center">
+                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl flex justify-between items-center backdrop-blur-sm">
                   <div className="truncate mr-4 text-left">
-                    <p className="text-[10px] text-slate-400 mb-1 text-left">Vault Address (Base)</p>
+                    <p className="text-[10px] text-slate-400 mb-1">Vault Address (Base)</p>
                     <p className="font-mono text-xs truncate">{vaultAddress || "Loading..."}</p>
                   </div>
-                  <button onClick={() => { navigator.clipboard.writeText(vaultAddress!); alert("Copied!"); }} className="p-3 bg-white/10 rounded-xl transition-all active:scale-95"><Copy width={18} /></button>
+                  <button onClick={() => { navigator.clipboard.writeText(vaultAddress!); alert("Copied!"); }} className="p-3 bg-white/10 rounded-xl"><Copy width={18} /></button>
                 </div>
               </div>
             </div>
 
             <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
               <h3 className="text-lg font-bold flex items-center gap-2 mb-6"><SystemRestart width={20} className={isScanning ? "animate-spin" : ""} /> Trash Scanner</h3>
-              <button onClick={() => scanTrash(address, "base-mainnet")} disabled={isScanning} className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 mb-4">
-                {isScanning ? "Scanning Blockchain..." : "Scan My Main Wallet"}
+              <button onClick={() => scanTrash()} disabled={isScanning || !isConnected} className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 mb-4">
+                {isScanning ? "Scanning..." : "Scan My Main Wallet"}
               </button>
               <div className="space-y-4">
                 {tokens.map((token: any) => (
                   <div key={token.address} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
                     <div className="flex items-center gap-3">
                       {token.logo ? <img src={token.logo} className="w-10 h-10 rounded-xl" /> : <div className="w-10 h-10 bg-white border rounded-xl flex items-center justify-center font-bold text-slate-400 text-xs">{token.symbol?.[0]}</div>}
-                      <div className="text-left"><p className="font-bold text-slate-800 text-sm">{token.symbol}</p></div>
+                      <div className="text-left"><p className="font-bold text-slate-800 text-sm text-left">{token.symbol}</p></div>
                     </div>
                     <button onClick={() => handleQuarantine(token.address, token.symbol, token.balance)} className="bg-slate-900 text-white text-[10px] font-black px-4 py-2.5 rounded-xl uppercase">Quarantine</button>
                   </div>
@@ -173,13 +165,13 @@ export default function Demo() {
           <div className="mt-6 space-y-4">
             <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
               <div className="flex items-center gap-2 mb-6 text-slate-800 text-left"><RefreshDouble width={24} /><h3 className="text-lg font-bold">Swap Inside Vault</h3></div>
-              <p className="text-xs text-slate-500 mb-6 text-left">Bersihkan koin yang sudah dikarantina menjadi ETH melalui 0x Protocol.</p>
+              <p className="text-xs text-slate-500 mb-6 text-left">Tukar koin yang ada di Vault menjadi ETH melalui 0x Protocol (Fee: 5%).</p>
               <div className="space-y-4">
                 {vaultScanner.tokens.length > 0 ? vaultScanner.tokens.map((token: any) => (
                   <div key={token.address} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
                     <div className="flex items-center gap-3">
                       {token.logo ? <img src={token.logo} className="w-10 h-10 rounded-xl" /> : <div className="w-10 h-10 bg-white border rounded-xl flex items-center justify-center font-bold text-slate-400 text-xs">{token.symbol?.[0]}</div>}
-                      <div className="text-left"><p className="font-bold text-slate-800 text-sm">{token.symbol}</p></div>
+                      <div className="text-left"><p className="font-bold text-slate-800 text-sm text-left">{token.symbol}</p></div>
                     </div>
                     <button 
                       onClick={() => handleSwapToEth(token)}
@@ -189,7 +181,7 @@ export default function Demo() {
                       {isSwapping === token.address ? "Swapping..." : "Swap to ETH"} <ArrowRight width={12} />
                     </button>
                   </div>
-                )) : <div className="text-center py-12 italic text-xs text-slate-400">Pindahkan koin sampah dari tab Actions dulu.</div>}
+                )) : <div className="text-center py-12 italic text-xs text-slate-400">Belum ada koin di dalam Vault.</div>}
               </div>
             </div>
           </div>
@@ -199,15 +191,15 @@ export default function Demo() {
           <div className="mt-6 space-y-4 text-left">
             <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
               <div className="mb-6">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-2"><Wallet width={20} /> Saldo Vault</h3>
-                <div className="text-3xl font-black text-slate-900">{Number(vaultEthBalance).toFixed(6)} <span className="text-sm font-medium text-slate-400">ETH</span></div>
+                <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-2 text-left"><Wallet width={20} /> Saldo Vault</h3>
+                <div className="text-3xl font-black text-slate-900 text-left">{Number(vaultEthBalance).toFixed(6)} <span className="text-sm font-medium text-slate-400">ETH</span></div>
               </div>
               <div className="grid grid-cols-4 gap-2 mb-4">
                 {[25, 50, 75, 100].map((pct) => (
                   <button key={pct} onClick={() => setWithdrawPercentage(pct)} className={`py-2 rounded-xl text-[10px] font-bold transition-all ${withdrawPercentage === pct ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>{pct === 100 ? 'MAX' : `${pct}%`}</button>
                 ))}
               </div>
-              <button onClick={handleWithdraw} className="w-full flex items-center justify-center gap-2 bg-red-500 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95"><LogOut width={18} /> Withdraw {withdrawPercentage}%</button>
+              <button onClick={handleWithdraw} disabled={Number(vaultEthBalance) === 0} className="w-full flex items-center justify-center gap-2 bg-red-500 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95"><LogOut width={18} /> Withdraw {withdrawPercentage}%</button>
             </div>
           </div>
         )}
