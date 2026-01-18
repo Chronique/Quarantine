@@ -30,12 +30,13 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initSmartAccount = async () => {
-      // Pastikan data Wagmi sudah siap sepenuhnya
+      // Tunggu hingga koneksi wallet dari Farcaster terdeteksi
       if (!isConnected || !walletClient || !address || !publicClient) return;
 
       setIsLoading(true);
       try {
-        // Manual Signer Wrapper untuk v0.3.2 agar konfirmasi wallet terpanggil
+        // BUNGKUS SIGNER SECARA MANUAL UNTUK v0.3.2
+        // Ini memastikan popup konfirmasi wallet muncul saat transaksi
         const customSigner = {
           address: address as `0x${string}`,
           signMessage: async ({ message }: { message: any }) => {
@@ -52,10 +53,10 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           }
         };
 
-        // 1. Definisikan Smart Account
+        // 1. Definisikan Smart Account (Alamat Vault Anda dihitung di sini)
         const simpleAccount = await toSimpleSmartAccount({
           client: publicClient as any,
-          owner: customSigner as any, // Menggunakan signer manual
+          owner: customSigner as any,
           factoryAddress: "0x9406Cc6185a346906296840746125a0E44976454",
           entryPoint: {
             address: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
@@ -69,24 +70,25 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           chain: base,
           bundlerTransport: http(`https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`),
           paymaster: {
-            // MERUJUK KE RUTE WEBHOOK SESUAI PERMINTAAN ANDA
             getPaymasterData: async (userOperation) => {
-              const response = await fetch("/api/webhook/paymaster", {
+              const response = await fetch("/api/webhook/paymaster", { 
                 method: "POST",
                 body: JSON.stringify({ 
                   method: "pm_getPaymasterData", 
                   params: [userOperation, "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", {}] 
                 }),
               });
-              return await response.json();
+              const res = await response.json();
+              return res; // Pastikan route mengembalikan data.result
             },
           },
         });
 
         setSmartClient(client);
         setVaultAddress(simpleAccount.address);
+        console.log("Vault Loaded:", simpleAccount.address);
       } catch (error) {
-        console.error("Gagal inisialisasi Smart Account:", error);
+        console.error("Gagal inisialisasi Vault:", error);
       } finally {
         setIsLoading(false);
       }

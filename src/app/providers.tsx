@@ -1,34 +1,30 @@
+// src/app/providers.tsx
 "use client";
 
 import dynamic from "next/dynamic";
-
 import FrameProvider from "~/components/providers/frame-provider";
 import { VaultProvider } from "~/components/providers/VaultProvider";
 
 const WagmiProvider = dynamic(
   () => import("~/components/providers/wagmi-provider"),
-  {
-    ssr: false,
-  }
+  { ssr: false }
 );
 
 const ErudaProvider = dynamic(
   () => import("~/components/providers/eruda-provider"),
-  {
-    ssr: false,
-  }
+  { ssr: false }
 );
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <WagmiProvider>
-      <FrameProvider>
+    // FrameProvider harus paling luar agar SDK siap untuk Wagmi
+    <FrameProvider>
+      <WagmiProvider>
         <ErudaProvider />
         <VaultProvider>
-        {children}
+          {children}
         </VaultProvider>
-      </FrameProvider>
-    </WagmiProvider>
-    
+      </WagmiProvider>
+    </FrameProvider>
   );
 }
