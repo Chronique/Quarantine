@@ -30,11 +30,12 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initSmartAccount = async () => {
+      // Tunggu hingga semua koneksi Wagmi siap
       if (!isConnected || !walletClient || !address || !publicClient) return;
 
       setIsLoading(true);
       try {
-        // Signer Wrapper agar Wallet EOA (Farcaster/Base) terpanggil
+        // Signer Wrapper khusus untuk permissionless v0.3.x agar popup wallet muncul
         const customSigner = {
           address: walletClient.account.address,
           signMessage: async ({ message }: any) => {
@@ -66,7 +67,7 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           chain: base,
           bundlerTransport: http(`https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`),
           paymaster: {
-            // MERUJUK KE RUTE WEBHOOK BARU
+            // MERUJUK KE RUTE WEBHOOK BARU ANDA
             getPaymasterData: async (userOperation) => {
               const response = await fetch("/api/webhook/paymaster", {
                 method: "POST",
@@ -75,7 +76,8 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
                   params: [userOperation, "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", {}] 
                 }),
               });
-              return await response.json();
+              const res = await response.json();
+              return res;
             },
           },
         });
@@ -83,7 +85,7 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
         setSmartClient(client);
         setVaultAddress(simpleAccount.address);
       } catch (error) {
-        console.error("Gagal inisialisasi Vault:", error);
+        console.error("Gagal inisialisasi Smart Account:", error);
       } finally {
         setIsLoading(false);
       }

@@ -6,6 +6,7 @@ export async function POST(request: Request) {
     const { method, params } = await request.json();
     const apiKey = process.env.NEXT_PUBLIC_PIMLICO_API_KEY;
 
+    // Meneruskan request ke Pimlico RPC
     const response = await fetch(`https://api.pimlico.io/v2/8453/rpc?apikey=${apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -19,9 +20,10 @@ export async function POST(request: Request) {
 
     const data = await response.json();
     
-    // Kembalikan hasil langsung ke provider
+    // Mengembalikan hasil simulasi paymaster ke frontend
     return NextResponse.json(data.result);
   } catch (error) {
-    return NextResponse.json({ error: "Paymaster API Error" }, { status: 500 });
+    console.error("Paymaster Error:", error);
+    return NextResponse.json({ error: "Gagal memproses Paymaster" }, { status: 500 });
   }
 }
