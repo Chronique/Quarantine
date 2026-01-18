@@ -13,6 +13,7 @@ interface VaultContextType {
   isLoading: boolean;
 }
 
+// Inisialisasi Context
 const VaultContext = createContext<VaultContextType>({
   smartAccountClient: null,
   vaultAddress: null,
@@ -30,23 +31,21 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initSmartAccount = async () => {
-      // PENGECEKAN KETAT: Pastikan walletClient dan account sudah ada
       if (!isConnected || !walletClient || !address || !publicClient) return;
 
       setIsLoading(true);
       try {
-        // Signer Wrapper yang lebih aman dari error undefined
         const customSigner = {
           address: address as `0x${string}`,
           signMessage: async ({ message }: { message: any }) => {
             return walletClient.signMessage({ 
-              account: walletClient.account || address, // Fallback ke address jika account undefined
+              account: walletClient.account, 
               message: typeof message === 'string' ? message : message.raw 
             });
           },
           signTypedData: async (typedData: any) => {
             return walletClient.signTypedData({
-              account: walletClient.account || address, // Fallback
+              account: walletClient.account,
               ...typedData
             });
           }
@@ -68,15 +67,14 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           bundlerTransport: http(`https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`),
           paymaster: {
             getPaymasterData: async (userOperation) => {
-              const response = await fetch("/api/webhook/paymaster", { 
+              const response = await fetch("/api/webhook/paymaster", {
                 method: "POST",
                 body: JSON.stringify({ 
                   method: "pm_getPaymasterData", 
                   params: [userOperation, "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", {}] 
                 }),
               });
-              const res = await response.json();
-              return res;
+              return await response.json();
             },
           },
         });
@@ -100,4 +98,5 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+// Pastikan useVault di-export di sini
 export const useVault = () => useContext(VaultContext);
