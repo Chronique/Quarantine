@@ -95,43 +95,50 @@ export default function Demo() {
 
   // Logika Swap menggunakan API 0x via Webhook
   const handleSwap = async (token: any) => {
-    if (!smartAccountClient || !vaultAddress) return;
-    setIsSwapping(token.address);
-    try {
-      const res = await fetch(`/api/webhook/swap?sellToken=${token.address}&sellAmount=${token.balance}&takerAddress=${vaultAddress}&buyToken=${targetToken.address}`);
-      const quote = await res.json();
-      
-      if (quote.error) throw new Error(quote.error);
+  if (!smartAccountClient || !vaultAddress) return;
+  setIsSwapping(token.address);
+  
+  try {
+    // Gunakan '0xeeee...' untuk Native ETH
+    const buyToken = targetToken.symbol === "ETH" 
+      ? "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" 
+      : "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
-      // Batch Approve + Swap
-      await smartAccountClient.sendTransactions({
-        transactions: [
-          {
-            to: token.address as `0x${string}`,
-            data: encodeFunctionData({
-              abi: erc20Abi,
-              functionName: "approve",
-              args: [quote.allowanceTarget as `0x${string}`, BigInt(token.balance)],
-            }),
-          },
-          {
-            to: quote.to as `0x${string}`,
-            data: quote.data as `0x${string}`,
-            value: BigInt(quote.value),
-          },
-        ],
-      });
+    const res = await fetch(`/api/webhook/swap?sellToken=${token.address}&sellAmount=${token.balance}&takerAddress=${vaultAddress}&buyToken=${buyToken}`);
+    const quote = await res.json();
+    
+    if (quote.error) throw new Error(quote.error);
 
-      alert(`Swap ke ${targetToken.symbol} Berhasil!`);
-      fetchVaultBalance();
-      vaultScanner.scanTrash(vaultAddress);
-    } catch (err) {
-      console.error("Swap Error:", err);
-      alert("Swap Gagal. Pastikan Vault memiliki saldo ETH minimal $3 untuk operasional.");
-    } finally { 
-      setIsSwapping(null); 
-    }
-  };
+    // Eksekusi Batch Transaksi (Approve + Swap)
+    // Karena VaultProvider sudah diperbaiki, ini AKAN memanggil popup wallet
+    await smartAccountClient.sendTransactions({
+      transactions: [
+        {
+          to: token.address as `0x${string}`,
+          data: encodeFunctionData({
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [quote.allowanceTarget as `0x${string}`, BigInt(token.balance)],
+          }),
+        },
+        {
+          to: quote.to as `0x${string}`,
+          data: quote.data as `0x${string}`,
+          value: BigInt(quote.value),
+        },
+      ],
+    });
+
+    alert(`Swap ke ${targetToken.symbol} Berhasil!`);
+    fetchVaultBalance();
+    vaultScanner.scanTrash(vaultAddress);
+  } catch (err) {
+    console.error(err);
+    alert("Gagal. Pastikan Vault punya minimal $3 ETH untuk operasional.");
+  } finally {
+    setIsSwapping(null);
+  }
+};
 
   // Logika Withdrawal dengan Persentase
   const handleWithdraw = async () => {

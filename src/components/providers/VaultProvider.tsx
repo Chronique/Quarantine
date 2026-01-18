@@ -3,8 +3,8 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { createSmartAccountClient } from "permissionless";
+// Import dari accounts saja, tidak perlu signer helper yang bermasalah
 import { toSimpleSmartAccount } from "permissionless/accounts";
-import { createPimlicoClient } from "permissionless/clients/pimlico";
 import { http } from "viem";
 import { base } from "viem/chains";
 
@@ -31,31 +31,38 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initSmartAccount = async () => {
+      // Pastikan walletClient dan data lainnya sudah siap
       if (!isConnected || !walletClient || !address || !publicClient) return;
 
       setIsLoading(true);
       try {
-        // 1. Definisikan Smart Account (Owner adalah EOA user)
+        // 1. Definisikan Smart Account
         const simpleAccount = await toSimpleSmartAccount({
           client: publicClient as any,
-          owner: walletClient as any,
+          // Masukkan walletClient langsung sebagai owner
+          owner: walletClient as any, 
           factoryAddress: "0x9406Cc6185a346906296840746125a0E44976454",
+          // Perbaikan: entryPoint harus berupa objek
           entryPoint: {
             address: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
             version: "0.6"
-          } as any,
+          },
         });
 
-        // 2. Hubungkan dengan Bundler & Paymaster Pimlico
+        // 2. Hubungkan dengan Bundler Pimlico
         const client = createSmartAccountClient({
           account: simpleAccount,
           chain: base,
           bundlerTransport: http(`https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`),
+          // Paymaster (Pastikan route /api/paymaster Anda sudah benar)
           paymaster: {
             getPaymasterData: async (userOperation) => {
               const response = await fetch("/api/paymaster", {
                 method: "POST",
-                body: JSON.stringify({ method: "pm_getPaymasterData", params: [userOperation, "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", {}] }),
+                body: JSON.stringify({ 
+                  method: "pm_getPaymasterData", 
+                  params: [userOperation, "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", {}] 
+                }),
               });
               return await response.json();
             },
