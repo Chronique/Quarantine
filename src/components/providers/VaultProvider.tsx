@@ -3,7 +3,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { createSmartAccountClient } from "permissionless";
-// Import dari accounts saja, tidak perlu signer helper yang bermasalah
 import { toSimpleSmartAccount } from "permissionless/accounts";
 import { http } from "viem";
 import { base } from "viem/chains";
@@ -31,33 +30,45 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initSmartAccount = async () => {
-      // Pastikan walletClient dan data lainnya sudah siap
       if (!isConnected || !walletClient || !address || !publicClient) return;
 
       setIsLoading(true);
       try {
-        // 1. Definisikan Smart Account
+        // Signer Wrapper agar Wallet EOA (Farcaster/Base) terpanggil
+        const customSigner = {
+          address: walletClient.account.address,
+          signMessage: async ({ message }: any) => {
+            return walletClient.signMessage({ 
+              account: walletClient.account, 
+              message: typeof message === 'string' ? message : message.raw 
+            });
+          },
+          signTypedData: async (typedData: any) => {
+            return walletClient.signTypedData({
+              account: walletClient.account,
+              ...typedData
+            });
+          }
+        };
+
         const simpleAccount = await toSimpleSmartAccount({
           client: publicClient as any,
-          // Masukkan walletClient langsung sebagai owner
-          owner: walletClient as any, 
+          owner: customSigner as any,
           factoryAddress: "0x9406Cc6185a346906296840746125a0E44976454",
-          // Perbaikan: entryPoint harus berupa objek
           entryPoint: {
             address: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
             version: "0.6"
           },
         });
 
-        // 2. Hubungkan dengan Bundler Pimlico
         const client = createSmartAccountClient({
           account: simpleAccount,
           chain: base,
           bundlerTransport: http(`https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`),
-          // Paymaster (Pastikan route /api/paymaster Anda sudah benar)
           paymaster: {
+            // MERUJUK KE RUTE WEBHOOK BARU
             getPaymasterData: async (userOperation) => {
-              const response = await fetch("/api/paymaster", {
+              const response = await fetch("/api/webhook/paymaster", {
                 method: "POST",
                 body: JSON.stringify({ 
                   method: "pm_getPaymasterData", 
@@ -72,7 +83,7 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
         setSmartClient(client);
         setVaultAddress(simpleAccount.address);
       } catch (error) {
-        console.error("Gagal inisialisasi Smart Account:", error);
+        console.error("Gagal inisialisasi Vault:", error);
       } finally {
         setIsLoading(false);
       }
