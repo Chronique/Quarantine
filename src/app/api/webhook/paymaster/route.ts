@@ -1,3 +1,4 @@
+// src/app/api/webhook/paymaster/route.ts
 import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
@@ -9,13 +10,16 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        id: 1, jsonrpc: "2.0", method, params,
+        id: 1,
+        jsonrpc: "2.0",
+        method,
+        params,
       }),
     });
 
     const data = await response.json();
     
-    // Sangat Penting: Kirim data.result agar diterima oleh permissionless
+    // Kembalikan result (bukan seluruh objek JSON) agar diterima oleh permissionless
     return NextResponse.json(data.result);
   } catch (error) {
     return NextResponse.json({ error: "Paymaster API Error" }, { status: 500 });

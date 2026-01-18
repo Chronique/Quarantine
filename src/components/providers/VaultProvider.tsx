@@ -30,44 +30,46 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initSmartAccount = async () => {
-      // Pastikan semua data Wagmi sudah siap
-      if (!isConnected || !walletClient || !address || !publicClient) {
-        console.log("Menunggu koneksi wallet...");
-        return;
-      }
+      // Pastikan data Wagmi sudah siap sepenuhnya
+      if (!isConnected || !walletClient || !address || !publicClient) return;
 
       setIsLoading(true);
       try {
-        // Signer Wrapper Manual agar Wallet EOA terpanggil saat transaksi
+        // Manual Signer Wrapper untuk v0.3.2 agar konfirmasi wallet terpanggil
         const customSigner = {
-          address: address,
-          signMessage: async ({ message }: any) => {
-            return walletClient.signMessage({ account: address, message });
+          address: address as `0x${string}`,
+          signMessage: async ({ message }: { message: any }) => {
+            return walletClient.signMessage({ 
+              account: walletClient.account, 
+              message: typeof message === 'string' ? message : message.raw 
+            });
           },
           signTypedData: async (typedData: any) => {
-            return walletClient.signTypedData({ account: address, ...typedData });
+            return walletClient.signTypedData({
+              account: walletClient.account,
+              ...typedData
+            });
           }
         };
 
-        // 1. Inisialisasi Simple Smart Account
+        // 1. Definisikan Smart Account
         const simpleAccount = await toSimpleSmartAccount({
           client: publicClient as any,
-          owner: customSigner as any,
-          factoryAddress: "0x9406Cc6185a346906296840746125a0E44976454", // Standar Factory
+          owner: customSigner as any, // Menggunakan signer manual
+          factoryAddress: "0x9406Cc6185a346906296840746125a0E44976454",
           entryPoint: {
             address: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
             version: "0.6"
           } as any,
         });
 
-        console.log("Vault Terkoneksi:", simpleAccount.address);
-
-        // 2. Hubungkan ke Bundler & Paymaster Pimlico via Webhook
+        // 2. Hubungkan dengan Bundler Pimlico
         const client = createSmartAccountClient({
           account: simpleAccount,
           chain: base,
           bundlerTransport: http(`https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`),
           paymaster: {
+            // MERUJUK KE RUTE WEBHOOK SESUAI PERMINTAAN ANDA
             getPaymasterData: async (userOperation) => {
               const response = await fetch("/api/webhook/paymaster", {
                 method: "POST",
