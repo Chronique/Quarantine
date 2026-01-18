@@ -1,4 +1,3 @@
-// src/hooks/useScanner.ts
 import { useState } from 'react';
 import { useAccount } from 'wagmi';
 import axios from 'axios';
@@ -8,6 +7,15 @@ export function useScanner() {
   const [tokens, setTokens] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Memecah array menjadi maksimal 30 alamat per request untuk DexScreener
+  const chunkArray = (array: any[], size: number) => {
+    const chunks = [];
+    for (let i = 0; i < array.length; i += size) {
+      chunks.push(array.slice(i, i + size));
+    }
+    return chunks;
+  };
+
   const scanTrash = async (targetAddress?: string) => {
     const addrToScan = targetAddress || address;
     if (!addrToScan) return;
@@ -16,48 +24,49 @@ export function useScanner() {
     setTokens([]);
 
     try {
-      // 1. Ambil Metadata & Saldo dari Moralis (Sangat cepat & ada Spam Filter)
-      // Moralis memberikan logo, simbol, dan status spam dalam satu request.
+      // 1. Ambil Saldo & Metadata dari Moralis (Base Chain)
       const moralisRes = await axios.get(
         `https://deep-index.moralis.io/api/v2.2/wallets/${addrToScan}/tokens?chain=base`,
         { 
-          headers: { 'X-API-Key': process.env.NEXT_PUBLIC_MORALIS_API_KEY },
-          params: { exclude_spam: true } // Otomatis filter koin spam
+          headers: { 'X-API-Key': process.env.NEXT_PUBLIC_MORALIS_API_KEY || '' },
+          params: { exclude_spam: true } 
         }
       );
 
       const rawTokens = moralisRes.data.result || [];
-
       if (rawTokens.length === 0) {
         setTokens([]);
         return;
       }
 
-      // 2. Ambil Likuiditas dari DexScreener untuk memfilter tab "Swap"
-      // Kita hanya mengambil data likuiditas untuk koin yang ditemukan oleh Moralis.
-      const tokenAddresses = rawTokens.map((t: any) => t.token_address).join(',');
-      const dexRes = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddresses}`);
-      const pairs = dexRes.data.pairs || [];
+      // 2. Ambil Likuiditas dari DexScreener secara bertahap (Chunking)
+      const tokenAddresses = rawTokens.map((t: any) => t.token_address);
+      const addressChunks = chunkArray(tokenAddresses, 30);
+      
+      let allPairs: any[] = [];
+      for (const chunk of addressChunks) {
+        const dexRes = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(',')}`);
+        if (dexRes.data.pairs) {
+          allPairs = [...allPairs, ...dexRes.data.pairs];
+        }
+      }
 
-      // 3. Gabungkan data Moralis dan DexScreener
-      const detailedTokens = rawTokens.map((t: any) => {
-        // Cari informasi likuiditas koin ini di DexScreener
-        const pair = pairs.find((p: any) => p.baseToken.address.toLowerCase() === t.token_address.toLowerCase());
-        
+      // 3. Mapping data akhir
+      const enrichedTokens = rawTokens.map((t: any) => {
+        const pair = allPairs.find((p: any) => p.baseToken.address.toLowerCase() === t.token_address.toLowerCase());
         return {
           address: t.token_address,
           symbol: t.symbol,
           name: t.name,
-          logo: t.thumbnail || t.logo || pair?.info?.imageUrl || null, // Prioritas logo Moralis
-          balance: t.balance, // Saldo dalam format BigInt string
+          logo: t.thumbnail || t.logo || pair?.info?.imageUrl || null,
+          balance: t.balance,
           decimals: t.decimals,
-          liquidityUSD: pair?.liquidity?.usd || 0, // Digunakan untuk filter di tab Swap
-          priceUSD: pair?.priceUsd || "0",
-          network: 'base-mainnet'
+          liquidityUSD: pair?.liquidity?.usd || 0,
+          priceUSD: pair?.priceUsd || "0"
         };
       });
 
-      setTokens(detailedTokens);
+      setTokens(enrichedTokens);
     } catch (error) {
       console.error("Scanning failed:", error);
     } finally {
