@@ -6,6 +6,7 @@ import { baseAccount } from "wagmi/connectors";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector";
 import { METADATA } from "../../lib/utils";
+import { injected, coinbaseWallet, walletConnect } from "wagmi/connectors";
 
 export const config = createConfig({
   chains: [base, optimism],
@@ -15,6 +16,8 @@ export const config = createConfig({
   },
   connectors: [
     farcasterMiniApp(), 
+    injected(),       // Untuk MetaMask/Browser Wallet
+    coinbaseWallet(), // Untuk Coinbase Wallet
     baseAccount({
       appName: METADATA.name,
       appLogoUrl: METADATA.iconImageUrl,
