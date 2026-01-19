@@ -4,24 +4,17 @@ import { NextResponse } from 'next/server';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   
-  // Ambil parameter dari frontend
   const buyToken = searchParams.get('buyToken') || 'ETH'; 
   const sellToken = searchParams.get('sellToken');
   const sellAmount = searchParams.get('sellAmount');
-  
-  // PERBAIKAN: Ubah nama variabel dari takerAddress menjadi taker
-  const taker = searchParams.get('taker'); 
+  const taker = searchParams.get('taker'); // Gunakan 'taker' sesuai v2
 
-  // Validasi parameter
   if (!sellToken || !sellAmount || !taker) {
     return NextResponse.json({ error: 'Missing parameters: sellToken, sellAmount, and taker are required' }, { status: 400 });
   }
 
-  const feeRecipient = "0x4fba95e4772be6d37a0c931D00570Fe2c9675524"; 
-  const buyTokenPercentageFee = "0.05"; // Fee 5%
-
-  // URL 0x v2 menggunakan parameter 'taker' (bukan takerAddress)
-  const url = `https://base.api.0x.org/swap/permit2/quote?buyToken=${buyToken}&sellToken=${sellToken}&sellAmount=${sellAmount}&taker=${taker}&feeRecipient=${feeRecipient}&buyTokenPercentageFee=${buyTokenPercentageFee}&chainId=8453`;
+  // Endpoint 0x v2 untuk Base Chain
+  const url = `https://base.api.0x.org/swap/permit2/quote?buyToken=${buyToken}&sellToken=${sellToken}&sellAmount=${sellAmount}&taker=${taker}&chainId=8453`;
 
   try {
     const response = await fetch(url, {
@@ -34,13 +27,12 @@ export async function GET(request: Request) {
     const data = await response.json();
     
     if (!response.ok) {
-      console.error("0x API Error Details:", data);
+      console.error("0x API Error:", data);
       return NextResponse.json(data, { status: response.status });
     }
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error("Fetch Error:", error);
-    return NextResponse.json({ error: 'Gagal fetch quote dari 0x' }, { status: 500 });
+    return NextResponse.json({ error: 'Gagal fetch quote v2' }, { status: 500 });
   }
 }

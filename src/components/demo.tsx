@@ -71,35 +71,51 @@ export default function Demo() {
   };
 
   const handleSwap = async (token: any) => {
-    if (!smartAccountClient || !vaultAddress) return;
-    setIsSwapping(token.address);
-    try {
-      const res = await fetch(`/api/webhook/swap?sellToken=${token.address}&sellAmount=${token.balance}&takerAddress=${vaultAddress}&buyToken=${targetToken.address}`);
-      const quote = await res.json();
-      if (quote.error) throw new Error(quote.error);
+  if (!smartAccountClient || !vaultAddress) return;
+  setIsSwapping(token.address);
+  try {
+    // 1. Ambil Quote v2 (Gunakan parameter 'taker')
+    const res = await fetch(`/api/webhook/swap?sellToken=${token.address}&sellAmount=${token.balance}&taker=${vaultAddress}&buyToken=${targetToken.address}`);
+    const quote = await res.json();
+    
+    if (!res.ok) throw new Error(quote.reason || "Saldo/Likuiditas tidak cukup");
 
-      await smartAccountClient.sendTransactions({
-        transactions: [
-          {
-            to: token.address as `0x${string}`,
-            data: encodeFunctionData({
-              abi: erc20Abi, functionName: "approve",
-              args: [quote.allowanceTarget as `0x${string}`, BigInt(token.balance)],
-            }),
-          },
-          {
-            to: quote.to as `0x${string}`,
-            data: quote.data as `0x${string}`,
-            value: BigInt(quote.value),
-          },
-        ],
+    const transactions = [];
+
+    // 2. Approval Otomatis jika diperlukan (0x v2 sering butuh approval ke Permit2)
+    if (quote.issues?.allowance) {
+      transactions.push({
+        to: token.address as `0x${string}`,
+        data: encodeFunctionData({
+          abi: erc20Abi, 
+          functionName: "approve",
+          args: [quote.issues.allowance.spender as `0x${string}`, BigInt(token.balance)],
+        }),
       });
-      alert(`Swap ke ${targetToken.symbol} Berhasil!`);
-      fetchVaultBalance();
-      vaultScanner.scanTrash(vaultAddress);
-    } catch (err) { alert("Swap Gagal. Cek saldo ETH di Vault."); }
-    finally { setIsSwapping(null); }
-  };
+    }
+
+    // 3. Eksekusi Swap (Data transaksi ada di quote.transaction)
+    transactions.push({
+      to: quote.transaction.to as `0x${string}`,
+      data: quote.transaction.data as `0x${string}`,
+      value: BigInt(quote.transaction.value),
+    });
+
+    // 4. Kirim Batch: Gas fee otomatis dipotong dari ETH di Vault Anda
+    const hash = await smartAccountClient.sendTransactions({
+      transactions: transactions,
+    });
+
+    alert(`Swap Berhasil! Hash: ${hash.slice(0, 10)}...`);
+    fetchVaultBalance();
+    vaultScanner.scanTrash(vaultAddress);
+  } catch (err: any) {
+    console.error("Swap Error:", err);
+    alert(`Gagal: ${err.message}`);
+  } finally {
+    setIsSwapping(null);
+  }
+};
 
   const handleWithdraw = async () => {
     if (!smartAccountClient || !address) return;
