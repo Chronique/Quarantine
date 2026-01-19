@@ -162,11 +162,16 @@ export default function Demo() {
             <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">Vault Disconnected</h3>
             <p className="text-slate-500 text-sm mb-8 leading-relaxed px-4">Dompet Anda belum terdeteksi. Silakan hubungkan dompet untuk mengelola Vault.</p>
             <button 
-              onClick={() => connect({ connector: connectors[0] })}
-              className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
-            >
-              <LogIn width={20} /> CONNECT WALLET
-            </button>
+  onClick={() => {
+    // Mencari konektor yang tersedia (MetaMask, Coinbase, dll)
+    // dan menghindari konektor farcaster untuk tombol manual
+    const targetConnector = connectors.find(c => c.id !== 'farcaster' && c.id !== 'farcaster-frame') || connectors[0];
+    connect({ connector: targetConnector });
+  }}
+  className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+>
+  <LogIn width={20} /> CONNECT WALLET
+</button>
           </div>
         ) : (
           <div className="mt-6 space-y-6">
