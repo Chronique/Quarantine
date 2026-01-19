@@ -19,6 +19,23 @@ const VaultContext = createContext<VaultContextType>({
   isLoading: false,
 });
 
+// Fungsi pembantu untuk membersihkan UserOperation dari metadata SDK yang tidak perlu
+const cleanUserOp = (userOp: any) => {
+  return {
+    sender: userOp.sender,
+    nonce: userOp.nonce,
+    initCode: userOp.initCode,
+    callData: userOp.callData,
+    callGasLimit: userOp.callGasLimit,
+    verificationGasLimit: userOp.verificationGasLimit,
+    preVerificationGas: userOp.preVerificationGas,
+    maxFeePerGas: userOp.maxFeePerGas,
+    maxPriorityFeePerGas: userOp.maxPriorityFeePerGas,
+    paymasterAndData: userOp.paymasterAndData,
+    signature: userOp.signature,
+  };
+};
+
 export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
@@ -30,12 +47,11 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initSmartAccount = async () => {
-      // Menggunakan logika pengecekan dari kode lama
       if (!isConnected || !walletClient || !address || !publicClient) return;
 
       setIsLoading(true);
       try {
-        // 1. Definisikan Smart Account (Menggunakan owner: walletClient langsung seperti kode lama)
+        // 1. Inisialisasi Simple Smart Account (EntryPoint v0.6)
         const simpleAccount = await toSimpleSmartAccount({
           client: publicClient as any,
           owner: walletClient as any, 
@@ -46,35 +62,41 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           },
         });
 
-        // 2. Hubungkan dengan Bundler Pimlico
+        // 2. Hubungkan dengan Bundler & Paymaster melalui Pimlico
         const client = createSmartAccountClient({
           account: simpleAccount,
           chain: base,
           bundlerTransport: http(
             `https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`
           ),
-          // Menggunakan endpoint Paymaster yang baru: /api/webhook/paymaster
           paymaster: {
-  getPaymasterData: async (userOperation) => {
-    const response = await fetch("/api/webhook/paymaster", {
-      method: "POST",
-      // PERBAIKAN: Tambahkan replacer (key, value) untuk menangani BigInt
-      body: JSON.stringify({ 
-        method: "pm_getPaymasterData", 
-        params: [
-          userOperation, 
-          "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", 
-          {}
-        ] 
-      }, (key, value) => 
-        typeof value === 'bigint' ? value.toString() : value
-      ),
-    });
-    
-    const res = await response.json();
-    return res;
-  },
-},
+            getPaymasterData: async (userOperation) => {
+              // Membersihkan UserOp dan menangani serialisasi BigInt
+              const response = await fetch("/api/webhook/paymaster", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                  method: "pm_getPaymasterData", 
+                  params: [
+                    cleanUserOp(userOperation), 
+                    "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", 
+                    {}
+                  ] 
+                }, (key, value) => 
+                  typeof value === 'bigint' ? value.toString() : value
+                ),
+              });
+              
+              const res = await response.json();
+              
+              if (res.error) {
+                console.error("Paymaster RPC Error:", res.error);
+                throw new Error(res.error.message || "Gagal mendapatkan data Paymaster");
+              }
+
+              return res.result;
+            },
+          },
         });
 
         setSmartClient(client);
