@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { createSmartAccountClient } from "permissionless";
 import { toSimpleSmartAccount } from "permissionless/accounts";
-import { http, numberToHex } from "viem"; // Ditambahkan numberToHex
+import { http, numberToHex } from "viem";
 import { base } from "viem/chains";
 
 interface VaultContextType {
@@ -19,25 +19,23 @@ const VaultContext = createContext<VaultContextType>({
   isLoading: false,
 });
 
-/**
- * Fungsi pembantu untuk membersihkan UserOp dan mengubah angka ke HEX String.
- * Ini mencegah error "Do not know how to serialize a BigInt" dan "Validation error".
- */
-const cleanUserOpForRPC = (userOp: any) => {
-  return {
-    sender: userOp.sender,
-    nonce: numberToHex(userOp.nonce), // Konversi ke Hex
-    initCode: userOp.initCode,
-    callData: userOp.callData,
-    callGasLimit: numberToHex(userOp.callGasLimit),
-    verificationGasLimit: numberToHex(userOp.verificationGasLimit),
-    preVerificationGas: numberToHex(userOp.preVerificationGas),
-    maxFeePerGas: numberToHex(userOp.maxFeePerGas),
-    maxPriorityFeePerGas: numberToHex(userOp.maxPriorityFeePerGas),
-    paymasterAndData: userOp.paymasterAndData,
-    signature: userOp.signature,
-  };
-};
+// Helper untuk mengubah semua angka/bigint ke Hex String
+const toHex = (val: any) => 
+  (typeof val === "bigint" || typeof val === "number" ? numberToHex(val) : val);
+
+const cleanUserOpForRPC = (userOp: any) => ({
+  sender: userOp.sender,
+  nonce: toHex(userOp.nonce),
+  initCode: userOp.initCode || "0x",
+  callData: userOp.callData,
+  callGasLimit: toHex(userOp.callGasLimit),
+  verificationGasLimit: toHex(userOp.verificationGasLimit),
+  preVerificationGas: toHex(userOp.preVerificationGas),
+  maxFeePerGas: toHex(userOp.maxFeePerGas),
+  maxPriorityFeePerGas: toHex(userOp.maxPriorityFeePerGas),
+  paymasterAndData: userOp.paymasterAndData || "0x",
+  signature: userOp.signature || "0x",
+});
 
 export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
   const { address, isConnected } = useAccount();
@@ -54,7 +52,6 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
       setIsLoading(true);
       try {
-        // 1. Inisialisasi Simple Smart Account (EntryPoint v0.6)
         const simpleAccount = await toSimpleSmartAccount({
           client: publicClient as any,
           owner: walletClient as any, 
@@ -65,7 +62,6 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           },
         });
 
-        // 2. Hubungkan dengan Bundler & Paymaster
         const client = createSmartAccountClient({
           account: simpleAccount,
           chain: base,
@@ -79,29 +75,25 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
                   jsonrpc: "2.0",
-                  id: 1,
+                  id: Date.now(),
                   method: "pm_getPaymasterData", 
                   params: [
-                    cleanUserOpForRPC(userOperation), // Mengirim data dalam format HEX
+                    cleanUserOpForRPC(userOperation),
                     "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", 
-                    "0x" // Params[2] harus string "0x", bukan objek kosong {}
+                    "0x" // Wajib "0x", jangan {}
                   ] 
                 }),
               });
               
               const res = await response.json();
-              
-              if (res.error) {
-                console.error("Paymaster RPC Error:", res.error);
-                throw new Error(res.error.message || "Gagal mendapatkan data paymaster");
-              }
-
+              if (res.error) throw new Error(res.error.message);
               return res.result; 
             },
           },
         });
 
         setSmartClient(client);
+        // PERBAIKAN: Gunakan simpleAccount.address, bukan address EOA
         setVaultAddress(simpleAccount.address);
       } catch (error) {
         console.error("Gagal inisialisasi Smart Account:", error);

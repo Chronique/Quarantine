@@ -112,18 +112,28 @@ export default function Demo() {
   };
 
   const handleWithdraw = async () => {
-    if (!smartAccountClient || !address) return;
-    const balanceInWei = parseEther(vaultEthBalance);
+  if (!smartAccountClient || !address) return;
+  try {
+    // Pastikan menggunakan saldo Vault yang terbaca di UI
+    const balanceInWei = parseEther(vaultEthBalance || "0");
+    if (balanceInWei === 0n) return;
+
+    // Tarik sebagian (misal 50%) untuk menyisakan dana prefund
     const amount = (balanceInWei * BigInt(withdrawPercentage)) / 100n;
+
+    const hash = await smartAccountClient.sendTransaction({ 
+      to: address, 
+      value: amount 
+    });
     
-    try {
-      const hash = await smartAccountClient.sendTransaction({ to: address, value: amount });
-      alert("Withdraw Berhasil! Hash: " + hash.slice(0, 10));
-      fetchVaultBalance();
-    } catch (err: any) {
-  alert("Gagal Withdraw: " + (err.shortMessage || err.message)); 
-}
-  };
+    alert(`Withdraw Berhasil! Hash: ${hash.slice(0, 10)}...`);
+    fetchVaultBalance();
+  } catch (err: any) {
+    console.error("Detail Error WD:", err);
+    // Tampilkan pesan eror asli agar tahu jika saldo prefund kurang
+    alert(`Gagal Withdraw: ${err.shortMessage || err.message}`);
+  }
+};
 
   // --- RENDER HELPERS ---
   const renderTokenItem = (token: any, actionLabel: string, onAction: (t: any) => void, isBtnLoading?: boolean) => (
