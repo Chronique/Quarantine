@@ -121,8 +121,8 @@ export default function Demo() {
       alert("Withdraw Berhasil! Hash: " + hash.slice(0, 10));
       fetchVaultBalance();
     } catch (err: any) {
-      alert("Gagal Withdraw. Pastikan Vault memiliki saldo ETH untuk gas.");
-    }
+  alert("Gagal Withdraw: " + (err.shortMessage || err.message)); 
+}
   };
 
   // --- RENDER HELPERS ---
