@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { createSmartAccountClient } from "permissionless";
 import { toSimpleSmartAccount } from "permissionless/accounts";
-import { http } from "viem";
+import { http, numberToHex } from "viem"; // Ditambahkan numberToHex
 import { base } from "viem/chains";
 
 interface VaultContextType {
@@ -19,18 +19,21 @@ const VaultContext = createContext<VaultContextType>({
   isLoading: false,
 });
 
-// Fungsi pembantu untuk membersihkan UserOperation agar payload tidak berat
-const cleanUserOp = (userOp: any) => {
+/**
+ * Fungsi pembantu untuk membersihkan UserOp dan mengubah angka ke HEX String.
+ * Ini mencegah error "Do not know how to serialize a BigInt" dan "Validation error".
+ */
+const cleanUserOpForRPC = (userOp: any) => {
   return {
     sender: userOp.sender,
-    nonce: userOp.nonce,
+    nonce: numberToHex(userOp.nonce), // Konversi ke Hex
     initCode: userOp.initCode,
     callData: userOp.callData,
-    callGasLimit: userOp.callGasLimit,
-    verificationGasLimit: userOp.verificationGasLimit,
-    preVerificationGas: userOp.preVerificationGas,
-    maxFeePerGas: userOp.maxFeePerGas,
-    maxPriorityFeePerGas: userOp.maxPriorityFeePerGas,
+    callGasLimit: numberToHex(userOp.callGasLimit),
+    verificationGasLimit: numberToHex(userOp.verificationGasLimit),
+    preVerificationGas: numberToHex(userOp.preVerificationGas),
+    maxFeePerGas: numberToHex(userOp.maxFeePerGas),
+    maxPriorityFeePerGas: numberToHex(userOp.maxPriorityFeePerGas),
     paymasterAndData: userOp.paymasterAndData,
     signature: userOp.signature,
   };
@@ -62,40 +65,41 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           },
         });
 
-        // 2. Konfigurasi Smart Account Client dengan Pimlico
+        // 2. Hubungkan dengan Bundler & Paymaster
         const client = createSmartAccountClient({
-  account: simpleAccount,
-  chain: base,
-  bundlerTransport: http(
-    `https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`
-  ),
-  // PERBAIKAN: getPaymasterData harus langsung di bawah paymaster
-  paymaster: {
-    getPaymasterData: async (userOperation: any) => {
-      const response = await fetch("/api/webhook/paymaster", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          jsonrpc: "2.0",
-          id: 1,
-          method: "pm_getPaymasterData", 
-          params: [
-            cleanUserOp(userOperation),
-            "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", // EntryPoint v0.6
-            {}
-          ] 
-        }, (key, value) => 
-          // SOLUSI BigInt: Ubah ke string agar bisa dikirim lewat JSON
-          typeof value === 'bigint' ? value.toString() : value
-        ),
-      });
-      
-      const res = await response.json();
-      if (res.error) throw new Error(res.error.message || "Gagal validasi paymaster");
-      return res.result; 
-    },
-  },
-});
+          account: simpleAccount,
+          chain: base,
+          bundlerTransport: http(
+            `https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`
+          ),
+          paymaster: {
+            getPaymasterData: async (userOperation: any) => {
+              const response = await fetch("/api/webhook/paymaster", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                  jsonrpc: "2.0",
+                  id: 1,
+                  method: "pm_getPaymasterData", 
+                  params: [
+                    cleanUserOpForRPC(userOperation), // Mengirim data dalam format HEX
+                    "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", 
+                    "0x" // Params[2] harus string "0x", bukan objek kosong {}
+                  ] 
+                }),
+              });
+              
+              const res = await response.json();
+              
+              if (res.error) {
+                console.error("Paymaster RPC Error:", res.error);
+                throw new Error(res.error.message || "Gagal mendapatkan data paymaster");
+              }
+
+              return res.result; 
+            },
+          },
+        });
 
         setSmartClient(client);
         setVaultAddress(simpleAccount.address);
