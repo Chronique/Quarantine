@@ -55,23 +55,26 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           ),
           // Menggunakan endpoint Paymaster yang baru: /api/webhook/paymaster
           paymaster: {
-            getPaymasterData: async (userOperation) => {
-              const response = await fetch("/api/webhook/paymaster", {
-                method: "POST",
-                body: JSON.stringify({ 
-                  method: "pm_getPaymasterData", 
-                  params: [
-                    userOperation, 
-                    "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", 
-                    {}
-                  ] 
-                }),
-              });
-              
-              const res = await response.json();
-              return res;
-            },
-          },
+  getPaymasterData: async (userOperation) => {
+    const response = await fetch("/api/webhook/paymaster", {
+      method: "POST",
+      // PERBAIKAN: Tambahkan replacer (key, value) untuk menangani BigInt
+      body: JSON.stringify({ 
+        method: "pm_getPaymasterData", 
+        params: [
+          userOperation, 
+          "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", 
+          {}
+        ] 
+      }, (key, value) => 
+        typeof value === 'bigint' ? value.toString() : value
+      ),
+    });
+    
+    const res = await response.json();
+    return res;
+  },
+},
         });
 
         setSmartClient(client);
