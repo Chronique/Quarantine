@@ -64,43 +64,38 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
         // 2. Konfigurasi Smart Account Client dengan Pimlico
         const client = createSmartAccountClient({
-          account: simpleAccount,
-          chain: base,
-          bundlerTransport: http(
-            `https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`
-          ),
-          paymaster: {
-            // PERBAIKAN: getPaymasterData langsung di bawah paymaster (bukan nested)
-            getPaymasterData: async (userOperation: any) => {
-              const response = await fetch("/api/webhook/paymaster", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                  jsonrpc: "2.0",
-                  id: 1,
-                  method: "pm_getPaymasterData", 
-                  params: [
-                    cleanUserOp(userOperation),
-                    "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", 
-                    {}
-                  ] 
-                }, (key, value) => 
-                  // Penanganan serialisasi BigInt untuk mencegah error
-                  typeof value === 'bigint' ? value.toString() : value
-                ),
-              });
-              
-              const res = await response.json();
-              
-              if (res.error) {
-                console.error("Paymaster RPC Error:", res.error);
-                throw new Error(res.error.message || "Gagal validasi paymaster");
-              }
-
-              return res.result; 
-            },
-          },
-        });
+  account: simpleAccount,
+  chain: base,
+  bundlerTransport: http(
+    `https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`
+  ),
+  // PERBAIKAN: getPaymasterData harus langsung di bawah paymaster
+  paymaster: {
+    getPaymasterData: async (userOperation: any) => {
+      const response = await fetch("/api/webhook/paymaster", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          jsonrpc: "2.0",
+          id: 1,
+          method: "pm_getPaymasterData", 
+          params: [
+            cleanUserOp(userOperation),
+            "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", // EntryPoint v0.6
+            {}
+          ] 
+        }, (key, value) => 
+          // SOLUSI BigInt: Ubah ke string agar bisa dikirim lewat JSON
+          typeof value === 'bigint' ? value.toString() : value
+        ),
+      });
+      
+      const res = await response.json();
+      if (res.error) throw new Error(res.error.message || "Gagal validasi paymaster");
+      return res.result; 
+    },
+  },
+});
 
         setSmartClient(client);
         setVaultAddress(simpleAccount.address);
