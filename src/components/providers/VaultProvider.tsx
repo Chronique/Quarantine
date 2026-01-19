@@ -19,20 +19,32 @@ const VaultContext = createContext<VaultContextType>({
   isLoading: false,
 });
 
-// Helper untuk mengubah semua angka/bigint ke Hex String
-const toHex = (val: any) => 
-  (typeof val === "bigint" || typeof val === "number" ? numberToHex(val) : val);
+/**
+ * Helper untuk memastikan nilai numerik diubah ke Hex.
+ * Jika nilai undefined (saat estimasi awal), dikembalikan "0x0" agar 
+ * tidak memicu "Validation error" di RPC Pimlico.
+ */
+const safeHex = (value: any) => {
+  if (value === undefined || value === null) return "0x0";
+  return typeof value === "string" && value.startsWith("0x") 
+    ? value 
+    : numberToHex(value);
+};
 
+/**
+ * Membersihkan dan memformat UserOperation untuk dikirim ke Paymaster.
+ * Menangani konversi BigInt ke Hex untuk mencegah error serialisasi.
+ */
 const cleanUserOpForRPC = (userOp: any) => ({
   sender: userOp.sender,
-  nonce: toHex(userOp.nonce),
+  nonce: safeHex(userOp.nonce),
   initCode: userOp.initCode || "0x",
   callData: userOp.callData,
-  callGasLimit: toHex(userOp.callGasLimit),
-  verificationGasLimit: toHex(userOp.verificationGasLimit),
-  preVerificationGas: toHex(userOp.preVerificationGas),
-  maxFeePerGas: toHex(userOp.maxFeePerGas),
-  maxPriorityFeePerGas: toHex(userOp.maxPriorityFeePerGas),
+  callGasLimit: safeHex(userOp.callGasLimit),
+  verificationGasLimit: safeHex(userOp.verificationGasLimit),
+  preVerificationGas: safeHex(userOp.preVerificationGas),
+  maxFeePerGas: safeHex(userOp.maxFeePerGas),
+  maxPriorityFeePerGas: safeHex(userOp.maxPriorityFeePerGas),
   paymasterAndData: userOp.paymasterAndData || "0x",
   signature: userOp.signature || "0x",
 });
@@ -48,10 +60,12 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initSmartAccount = async () => {
+      // Inisialisasi hanya jika dompet utama sudah terhubung
       if (!isConnected || !walletClient || !address || !publicClient) return;
 
       setIsLoading(true);
       try {
+        // 1. Buat konfigurasi Simple Smart Account (EntryPoint v0.6)
         const simpleAccount = await toSimpleSmartAccount({
           client: publicClient as any,
           owner: walletClient as any, 
@@ -62,6 +76,7 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           },
         });
 
+        // 2. Buat Client untuk Bundler & Paymaster Pimlico
         const client = createSmartAccountClient({
           account: simpleAccount,
           chain: base,
@@ -78,23 +93,31 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
                   id: Date.now(),
                   method: "pm_getPaymasterData", 
                   params: [
-                    cleanUserOpForRPC(userOperation),
+                    cleanUserOpForRPC(userOperation), // Kirim data dalam format HEX
                     "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", 
-                    "0x" // Wajib "0x", jangan {}
+                    "0x" // Context parameter wajib hex string
                   ] 
                 }),
               });
               
               const res = await response.json();
-              if (res.error) throw new Error(res.error.message);
+              
+              // Tangkap eror spesifik dari Paymaster untuk debugging
+              if (res.error) {
+                console.error("Paymaster Error:", res.error);
+                throw new Error(res.error.message || "Gagal mendapatkan data paymaster");
+              }
+
               return res.result; 
             },
           },
         });
 
         setSmartClient(client);
-        // PERBAIKAN: Gunakan simpleAccount.address, bukan address EOA
+        
+        // PENTING: Ambil alamat kontrak Vault, bukan alamat EOA dompet utama
         setVaultAddress(simpleAccount.address);
+        
       } catch (error) {
         console.error("Gagal inisialisasi Smart Account:", error);
       } finally {
