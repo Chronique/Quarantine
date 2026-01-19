@@ -20,9 +20,8 @@ const VaultContext = createContext<VaultContextType>({
 });
 
 /**
- * Helper untuk memastikan nilai numerik diubah ke Hex.
- * Jika nilai undefined (saat estimasi awal), dikembalikan "0x0" agar 
- * tidak memicu "Validation error" di RPC Pimlico.
+ * Helper untuk memastikan nilai numerik diubah ke Hex String.
+ * Menghindari "Validation error" di RPC Pimlico jika nilai gas undefined.
  */
 const safeHex = (value: any) => {
   if (value === undefined || value === null) return "0x0";
@@ -32,8 +31,7 @@ const safeHex = (value: any) => {
 };
 
 /**
- * Membersihkan dan memformat UserOperation untuk dikirim ke Paymaster.
- * Menangani konversi BigInt ke Hex untuk mencegah error serialisasi.
+ * Memformat UserOperation agar kompatibel dengan standar RPC ERC-4337.
  */
 const cleanUserOpForRPC = (userOp: any) => ({
   sender: userOp.sender,
@@ -60,12 +58,12 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initSmartAccount = async () => {
-      // Inisialisasi hanya jika dompet utama sudah terhubung
       if (!isConnected || !walletClient || !address || !publicClient) return;
 
       setIsLoading(true);
       try {
-        // 1. Buat konfigurasi Simple Smart Account (EntryPoint v0.6)
+        // 1. Inisialisasi Simple Smart Account (EntryPoint v0.6)
+        // PERBAIKAN: Properti 'chain' dihapus karena tidak didukung di sini.
         const simpleAccount = await toSimpleSmartAccount({
           client: publicClient as any,
           owner: walletClient as any, 
@@ -76,10 +74,10 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           },
         });
 
-        // 2. Buat Client untuk Bundler & Paymaster Pimlico
+        // 2. Hubungkan dengan Bundler & Paymaster Pimlico
         const client = createSmartAccountClient({
           account: simpleAccount,
-          chain: base,
+          chain: base, // Jaringan tetap didefinisikan di level Client
           bundlerTransport: http(
             `https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`
           ),
@@ -93,29 +91,21 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
                   id: Date.now(),
                   method: "pm_getPaymasterData", 
                   params: [
-                    cleanUserOpForRPC(userOperation), // Kirim data dalam format HEX
+                    cleanUserOpForRPC(userOperation),
                     "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", 
-                    "0x" // Context parameter wajib hex string
+                    "0x" 
                   ] 
                 }),
               });
               
               const res = await response.json();
-              
-              // Tangkap eror spesifik dari Paymaster untuk debugging
-              if (res.error) {
-                console.error("Paymaster Error:", res.error);
-                throw new Error(res.error.message || "Gagal mendapatkan data paymaster");
-              }
-
+              if (res.error) throw new Error(res.error.message);
               return res.result; 
             },
           },
         });
 
         setSmartClient(client);
-        
-        // PENTING: Ambil alamat kontrak Vault, bukan alamat EOA dompet utama
         setVaultAddress(simpleAccount.address);
         
       } catch (error) {
