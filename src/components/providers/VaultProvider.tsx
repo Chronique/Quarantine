@@ -19,7 +19,7 @@ const VaultContext = createContext<VaultContextType>({
   isLoading: false,
 });
 
-// Fungsi pembantu untuk membersihkan UserOperation dari metadata SDK yang tidak perlu
+// Fungsi pembantu untuk membersihkan UserOperation agar payload tidak berat
 const cleanUserOp = (userOp: any) => {
   return {
     sender: userOp.sender,
@@ -62,7 +62,7 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           },
         });
 
-        // 2. Hubungkan dengan Bundler & Paymaster melalui Pimlico
+        // 2. Konfigurasi Smart Account Client dengan Pimlico
         const client = createSmartAccountClient({
           account: simpleAccount,
           chain: base,
@@ -70,19 +70,22 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
             `https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`
           ),
           paymaster: {
-            getPaymasterData: async (userOperation) => {
-              // Membersihkan UserOp dan menangani serialisasi BigInt
+            // PERBAIKAN: getPaymasterData langsung di bawah paymaster (bukan nested)
+            getPaymasterData: async (userOperation: any) => {
               const response = await fetch("/api/webhook/paymaster", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
+                  jsonrpc: "2.0",
+                  id: 1,
                   method: "pm_getPaymasterData", 
                   params: [
-                    cleanUserOp(userOperation), 
+                    cleanUserOp(userOperation),
                     "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", 
                     {}
                   ] 
                 }, (key, value) => 
+                  // Penanganan serialisasi BigInt untuk mencegah error
                   typeof value === 'bigint' ? value.toString() : value
                 ),
               });
@@ -91,10 +94,10 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
               
               if (res.error) {
                 console.error("Paymaster RPC Error:", res.error);
-                throw new Error(res.error.message || "Gagal mendapatkan data Paymaster");
+                throw new Error(res.error.message || "Gagal validasi paymaster");
               }
 
-              return res.result;
+              return res.result; 
             },
           },
         });
