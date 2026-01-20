@@ -17,13 +17,14 @@ import { BottomNavigation } from "~/components/bottom-navigation";
 import { TabType } from "~/types";
 
 export default function Demo() {
-  const { address, isConnected } = useAccount(); //
+  const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const { sendTransaction } = useSendTransaction();
   const publicClient = usePublicClient();
-  const chainId = useChainId(); //
-  const { switchChain } = useSwitchChain(); //
-  const { vaultAddress, isLoading: vaultLoading, smartAccountClient } = useVault(); //
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+  
+  const { vaultAddress, isLoading: vaultLoading, smartAccountClient } = useVault();
   
   const [activeTab, setActiveTab] = useState<TabType>("actions");
   const mainScanner = useScanner();
@@ -40,26 +41,26 @@ export default function Demo() {
   // --- LOGIC: Price Fetching (0x API) ---
   const getEthPrice = async () => {
     try {
-      // Mengambil harga 1 ETH dalam USDC (6 desimal) via 0x API proxy
+      if (!vaultAddress) return 3200; // Fallback default
       const res = await fetch(
         `/api/webhook/swap?sellToken=0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee&sellAmount=1000000000000000000&buyToken=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913&taker=${vaultAddress}`
       );
       const data = await res.json();
       if (data.buyAmount) {
-        return Number(data.buyAmount) / 1_000_000; // Konversi dari 6 desimal ke satuan USD
+        return Number(data.buyAmount) / 1_000_000;
       }
-      return 3200; // Fallback harga pasar rata-rata
+      return 3200;
     } catch (err) {
       console.error("Gagal ambil harga via 0x:", err);
       return 3200;
     }
   };
 
-  // --- LOGIC: Balances ---
+  // --- LOGIC: Fetching Balances ---
   const fetchVaultBalance = useCallback(async () => {
     if (!vaultAddress || !isAddress(vaultAddress) || !publicClient) return;
     try {
-      const balance = await publicClient.getBalance({ address: vaultAddress }); //
+      const balance = await publicClient.getBalance({ address: vaultAddress });
       setVaultEthBalance(formatEther(balance));
     } catch (err) {
       console.error("Balance fetch failed", err);
@@ -79,7 +80,7 @@ export default function Demo() {
   // --- LOGIC: Actions ---
   const handleQuarantine = async (token: any) => {
     if (!vaultAddress || !address) return;
-    if (chainId !== 8453) { switchChain({ chainId: 8453 }); return; } //
+    if (chainId !== 8453) { switchChain({ chainId: 8453 }); return; }
 
     try {
       sendTransaction({
@@ -87,7 +88,8 @@ export default function Demo() {
         data: encodeFunctionData({
           abi: erc20Abi,
           functionName: 'transfer',
-          args: [vaultAddress as `0x${string}`, BigInt(token.balance)],
+          // PERBAIKAN: Tambahkan fallback "0"
+          args: [vaultAddress as `0x${string}`, BigInt(token?.balance || "0")],
         }),
       });
     } catch (err: any) { alert("Transfer gagal: " + err.message); }
@@ -101,6 +103,7 @@ export default function Demo() {
     try {
       const res = await fetch(`/api/webhook/swap?sellToken=${token.address}&sellAmount=${token.balance}&taker=${vaultAddress}&buyToken=${targetToken.address}`);
       const quote = await res.json();
+      
       if (!res.ok) throw new Error(quote.reason || "Likuiditas tidak tersedia");
 
       const txs = [];
@@ -110,39 +113,46 @@ export default function Demo() {
           data: encodeFunctionData({
             abi: erc20Abi, 
             functionName: "approve",
-            args: [quote.issues.allowance.spender as `0x${string}`, BigInt(token.balance)],
+            // PERBAIKAN: Fallback balance
+            args: [quote.issues.allowance.spender as `0x${string}`, BigInt(token?.balance || "0")],
           }),
         });
       }
-      txs.push({
-        to: quote.transaction.to as `0x${string}`,
-        data: quote.transaction.data as `0x${string}`,
-        value: BigInt(quote.transaction.value),
-      });
 
-      const hash = await smartAccountClient.sendTransactions({ transactions: txs }); //
-      alert(`Swap Berhasil! Hash: ${hash.slice(0, 10)}...`);
-      fetchVaultBalance();
-      vaultScanner.scanTrash(vaultAddress);
+      // PERBAIKAN: Validasi objek transaction dan value
+      if (quote?.transaction) {
+        txs.push({
+          to: quote.transaction.to as `0x${string}`,
+          data: quote.transaction.data as `0x${string}`,
+          value: BigInt(quote.transaction.value || "0"),
+        });
+
+        const hash = await smartAccountClient.sendTransactions({ transactions: txs });
+        alert(`Swap Berhasil! Hash: ${hash.slice(0, 10)}...`);
+        fetchVaultBalance();
+        vaultScanner.scanTrash(vaultAddress);
+      } else {
+        throw new Error("Data transaksi tidak valid dari API");
+      }
     } catch (err: any) { alert(`Gagal Swap: ${err.message}`); } finally { setIsSwapping(null); }
   };
 
   const handleWithdraw = async () => {
     if (!smartAccountClient || !address) return;
-    if (chainId !== 8453) { switchChain({ chainId: 8453 }); return; } //
+    if (chainId !== 8453) { switchChain({ chainId: 8453 }); return; }
 
     try {
-      const balanceInWei = parseEther(vaultEthBalance || "0"); //
+      const balanceInWei = parseEther(vaultEthBalance || "0");
       if (balanceInWei === 0n) return;
 
-      // Hitung cadangan gas dinamis $0.5
       const ethPrice = await getEthPrice();
       const bufferUsd = 0.5;
       const gasBufferWei = parseEther((bufferUsd / ethPrice).toFixed(18));
 
-      let amount = (balanceInWei * BigInt(withdrawPercentage)) / 100n;
+      // PERBAIKAN: Pastikan persentase memiliki nilai default
+      const percentage = BigInt(withdrawPercentage || 0);
+      let amount = (balanceInWei * percentage) / 100n;
 
-      // Proteksi saldo gas jika user memilih MAX
       if (withdrawPercentage === 100) {
         if (amount > gasBufferWei) {
           amount = amount - gasBufferWei;
@@ -152,10 +162,13 @@ export default function Demo() {
         }
       }
 
-      const hash = await smartAccountClient.sendTransaction({ to: address, value: amount }); //
+      const hash = await smartAccountClient.sendTransaction({ to: address, value: amount });
       alert(`Withdraw Berhasil!`);
       fetchVaultBalance();
-    } catch (err: any) { alert(`Gagal: ${err.shortMessage || err.message}`); }
+    } catch (err: any) { 
+      console.error("WD Error:", err);
+      alert(`Gagal: ${err.shortMessage || err.message}`); 
+    }
   };
 
   // --- RENDER HELPERS ---
@@ -193,9 +206,12 @@ export default function Demo() {
               <Wallet width={40} className="text-blue-600" />
             </div>
             <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">Vault Disconnected</h3>
-            <p className="text-slate-500 text-sm mb-8 leading-relaxed px-4">Hubungkan dompet Anda di jaringan Base untuk mengelola Vault.</p>
+            <p className="text-slate-500 text-sm mb-8 leading-relaxed px-4">Dompet Anda belum terdeteksi. Silakan hubungkan dompet untuk mengelola Vault.</p>
             <button 
-              onClick={() => connect({ connector: connectors[0] })}
+              onClick={() => {
+                const targetConnector = connectors.find(c => c.id !== 'farcaster' && c.id !== 'farcaster-frame') || connectors[0];
+                connect({ connector: targetConnector });
+              }}
               className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
             >
               <LogIn width={20} /> CONNECT WALLET
@@ -231,6 +247,7 @@ export default function Demo() {
                     {mainScanner.isLoading ? "Scanning Blockchain..." : "Scan My Main Wallet"}
                   </button>
                 </div>
+
                 <div className="space-y-3">
                   <p className="text-xs font-bold text-slate-400 uppercase ml-2 tracking-widest">Infected Tokens Found</p>
                   {mainScanner.tokens.map(t => renderTokenItem(t, "Quarantine", handleQuarantine))}
@@ -246,10 +263,21 @@ export default function Demo() {
                       <RefreshDouble width={24} className="text-blue-600" />
                       <h3 className="text-lg font-bold">Swap Inside Vault</h3>
                     </div>
+                    <div className="flex bg-slate-100 dark:bg-zinc-800 p-1 rounded-xl">
+                      {["ETH", "USDC"].map((sym) => (
+                        <button 
+                          key={sym} 
+                          onClick={() => setTargetToken({ symbol: sym, address: sym === "ETH" ? "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" : "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" })} 
+                          className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${targetToken.symbol === sym ? "bg-white dark:bg-zinc-700 text-blue-600 shadow-sm" : "text-slate-500"}`}
+                        >
+                          {sym}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div className="space-y-3">
                     {vaultScanner.tokens.filter((t: any) => t.liquidityUSD > 1).map((token: any) => 
-                      renderTokenItem(token, `To ETH`, handleSwap, isSwapping === token.address)
+                      renderTokenItem(token, `To ${targetToken.symbol}`, handleSwap, isSwapping === token.address)
                     )}
                   </div>
                 </div>
@@ -265,6 +293,7 @@ export default function Demo() {
                       {Number(vaultEthBalance).toFixed(6)} <span className="text-sm font-bold text-blue-600">ETH</span>
                     </div>
                   </div>
+                  
                   <div className="grid grid-cols-4 gap-2 mb-4">
                     {[25, 50, 75, 100].map((pct) => (
                       <button 
@@ -276,18 +305,35 @@ export default function Demo() {
                       </button>
                     ))}
                   </div>
+
                   <button 
                     onClick={handleWithdraw} 
                     disabled={Number(vaultEthBalance) === 0} 
-                    className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-5 rounded-2xl shadow-xl active:scale-95 transition-all disabled:opacity-50 uppercase tracking-widest"
+                    className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-5 rounded-2xl shadow-xl active:scale-95 transition-all disabled:bg-slate-200 disabled:shadow-none uppercase tracking-widest"
                   >
                     Withdraw {withdrawPercentage}%
                   </button>
+
+                  <div className="mt-10 border-t border-slate-100 dark:border-zinc-800 pt-6">
+                    <p className="text-xs font-black text-slate-400 uppercase mb-4 tracking-widest">Tokens In Vault</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {vaultScanner.tokens.map((token: any) => (
+                        <div key={token.address} className="flex flex-col gap-2 p-4 bg-slate-50 dark:bg-zinc-800/50 rounded-2xl border border-slate-100 dark:border-zinc-800">
+                          <div className="flex items-center gap-2">
+                            {token.logo ? <img src={token.logo} className="w-5 h-5 rounded-full" /> : <div className="w-5 h-5 bg-slate-200 rounded-full" />}
+                            <p className="font-bold text-xs text-slate-700 dark:text-zinc-200">{token.symbol}</p>
+                          </div>
+                          <p className="text-[10px] font-black text-blue-600 uppercase tracking-tighter">Safe in Vault</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
           </div>
         )}
+
         <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
     </div>
