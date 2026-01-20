@@ -137,39 +137,69 @@ export default function Demo() {
     } catch (err: any) { alert(`Gagal Swap: ${err.message}`); } finally { setIsSwapping(null); }
   };
 
-  const handleWithdraw = async () => {
-    if (!smartAccountClient || !address) return;
-    if (chainId !== 8453) { switchChain({ chainId: 8453 }); return; }
+  // Ganti bagian handleWithdraw di demo.tsx
+const handleWithdraw = async () => {
+  if (!smartAccountClient || !address) return;
+  
+  // 1. Pastikan Chain ID benar
+  if (chainId !== 8453) {
+    switchChain({ chainId: 8453 });
+    return;
+  }
 
-    try {
-      const balanceInWei = parseEther(vaultEthBalance || "0");
-      if (balanceInWei === 0n) return;
-
-      const ethPrice = await getEthPrice();
-      const bufferUsd = 0.5;
-      const gasBufferWei = parseEther((bufferUsd / ethPrice).toFixed(18));
-
-      // PERBAIKAN: Pastikan persentase memiliki nilai default
-      const percentage = BigInt(withdrawPercentage || 0);
-      let amount = (balanceInWei * percentage) / 100n;
-
-      if (withdrawPercentage === 100) {
-        if (amount > gasBufferWei) {
-          amount = amount - gasBufferWei;
-        } else {
-          alert("Saldo ETH tidak cukup untuk biaya gas (minimal $0.5)");
-          return;
-        }
-      }
-
-      const hash = await smartAccountClient.sendTransaction({ to: address, value: amount });
-      alert(`Withdraw Berhasil!`);
-      fetchVaultBalance();
-    } catch (err: any) { 
-      console.error("WD Error:", err);
-      alert(`Gagal: ${err.shortMessage || err.message}`); 
+  try {
+    // 2. Ambil saldo. Jika error/undefined, anggap "0"
+    const balanceStr = vaultEthBalance || "0";
+    const balanceInWei = parseEther(balanceStr);
+    
+    if (balanceInWei === 0n) {
+      alert("Saldo Vault Kosong");
+      return;
     }
-  };
+
+    // 3. Ambil Harga ETH (Safe Fetch)
+    let ethPrice = 3200; // Default fallback
+    try {
+       const fetchedPrice = await getEthPrice();
+       if (fetchedPrice && !isNaN(fetchedPrice)) ethPrice = fetchedPrice;
+    } catch (e) { console.log("Price fetch failed, using default"); }
+
+    // 4. Hitung Buffer Gas ($0.5)
+    const bufferUsd = 0.5;
+    // toFixed(18) menjamin string angka, parseEther aman.
+    const gasBufferWei = parseEther((bufferUsd / ethPrice).toFixed(18));
+
+    // 5. SAFETY CHECK: Pastikan withdrawPercentage ada nilainya
+    // Gunakan nilai default 0 jika undefined/null
+    const cleanPercentage = withdrawPercentage ?? 0;
+    const percentageBigInt = BigInt(cleanPercentage); // Sekarang pasti aman
+
+    let amount = (balanceInWei * percentageBigInt) / 100n;
+
+    // 6. Logika Max Withdraw (Sisa Gas)
+    if (cleanPercentage === 100) {
+      if (amount > gasBufferWei) {
+        amount = amount - gasBufferWei;
+      } else {
+        alert(`Saldo ETH (${formatEther(amount)}) tidak cukup untuk bayar gas (butuh ~$0.5)`);
+        return;
+      }
+    }
+
+    // 7. Eksekusi Transaksi
+    const hash = await smartAccountClient.sendTransaction({ 
+      to: address, 
+      value: amount 
+    });
+    
+    alert(`Withdraw Berhasil!`);
+    fetchVaultBalance();
+  } catch (err: any) {
+    console.error("Detail Error WD:", err);
+    // Tampilkan pesan eror yang lebih jelas
+    alert(`Gagal: ${err.message || "Terjadi kesalahan sistem"}`); 
+  }
+};
 
   // --- RENDER HELPERS ---
   const renderTokenItem = (token: any, actionLabel: string, onAction: (t: any) => void, isBtnLoading?: boolean) => (

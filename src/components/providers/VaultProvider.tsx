@@ -30,12 +30,10 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initSmartAccount = async () => {
-      // Inisialisasi hanya jika EOA (Signer) sudah terhubung
       if (!isConnected || !walletClient || !address || !publicClient) return;
 
       setIsLoading(true);
       try {
-        // 1. Inisialisasi Simple Smart Account (EntryPoint v0.6)
         const simpleAccount = await toSimpleSmartAccount({
           client: publicClient as any,
           owner: walletClient as any, 
@@ -46,22 +44,20 @@ export const VaultProvider = ({ children }: { children: React.ReactNode }) => {
           },
         });
 
-        // 2. Hubungkan dengan Bundler Pimlico TANPA Paymaster
-        // Dengan menghapus properti 'paymaster', saldo ETH di Vault akan digunakan untuk gas.
+        // Setup Client TANPA Paymaster (Self-Paying)
         const client = createSmartAccountClient({
           account: simpleAccount,
           chain: base,
           bundlerTransport: http(
             `https://api.pimlico.io/v2/8453/rpc?apikey=${process.env.NEXT_PUBLIC_PIMLICO_API_KEY}`
           ),
-          // Bagian paymaster dihapus agar user membayar gas sendiri
+          // HAPUS properti paymaster agar gas diambil dari saldo Vault
         });
 
         setSmartClient(client);
         setVaultAddress(simpleAccount.address);
-        
       } catch (error) {
-        console.error("Gagal inisialisasi Smart Account:", error);
+        console.error("Gagal inisialisasi:", error);
       } finally {
         setIsLoading(false);
       }
